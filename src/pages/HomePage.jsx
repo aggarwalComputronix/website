@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { supabase, DUMMY_SUPABASE_DATA } from '../mockSupabase';
+import { supabase } from '../supabaseClient';
 import ProductCard from '../components/ProductCard';
 import CategoryCard from '../components/CategoryCard';
 import TestimonialCard from '../components/TestimonialCard';
@@ -19,54 +19,73 @@ import bagImage from '/images/bag1.avif';
 import webcamImage from '/images/webcam.avif';
 import cableImage from '/images/cable.jpg';
 
-const HomePage = () => {
+// Define and EXPORT the categories array so ShopAllPage can import it
+export const CATEGORIES = [
+    { title: 'Batteries', image: batteryImage, collection: 'Batteries' },
+    { title: 'Adapters', image: adaptersImage, collection: 'Adapters' },
+    { title: 'Docking Station', image: dockingImage, collection: 'Docking Station' },
+    { title: 'Locks', image: locksImage, collection: 'Locks' },
+    { title: 'Headphones', image: headPhonesImage, collection: 'Headphones' },
+    { title: 'Mouse', image: mouseImage, collection: 'Mouse' },
+    { title: 'Screens', image: screenImage, collection: 'Screens' },
+    { title: 'Privacy Filters', image: privacyImage, collection: 'Privacy Filters' },
+    { title: 'Stands', image: standImage, collection: 'Stands' },
+    { title: 'Bags', image: bagImage, collection: 'Bags' },
+    { title: 'Webcams', image: webcamImage, collection: 'Webcams' },
+    { title: 'Cables', image: cableImage, collection: 'Cables' },
+];
+
+// This component accepts setCurrentPage (renamed to navigate) from App.jsx
+const HomePage = ({ setCurrentPage: navigate }) => { 
   const [products, setProducts] = useState([]);
   const [query, setQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const scrollContainerRef = useRef(null);
 
-  // Fetch best-sellers from Supabase
+  // --- FETCHING REAL PRODUCTS FOR BEST SELLERS ---
   useEffect(() => {
-    supabase.from('products').select('*').then(({ data }) => {
-      setProducts(data.slice(0, 4));
-    });
+    const fetchBestSellers = async () => {
+        // Fetch top 4 products of ANY collection for 'Best Sellers' section
+        const { data, error } = await supabase
+            .from('products')
+            .select('id, name, price, "productImageUrl", brand')
+            .limit(4); 
+
+        if (error) {
+            console.error("Error fetching products:", error);
+        } else {
+            const mappedData = data.map(p => ({
+                id: p.id,
+                name: p.name,
+                price: p.price,
+                image: p.productImageUrl,
+                brand: p.brand,
+            }));
+            setProducts(mappedData);
+        }
+    };
+    fetchBestSellers();
   }, []);
 
   const handleSearch = () => {
+    // --- SEARCH LOGIC ---
     setIsSearching(true);
     console.log(`Searching for: ${query}`);
+    
     setTimeout(() => {
       setIsSearching(false);
-      const results = DUMMY_SUPABASE_DATA.products.filter(p => p.name.toLowerCase().includes(query.toLowerCase()));
-      
+      // Dummy search results message 
       const messageBox = document.createElement('div');
       messageBox.className = 'fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-lg shadow-xl border border-gray-200 text-center';
       messageBox.innerHTML = `
         <h2 class="text-2xl font-bold mb-2 text-indigo-600">Search Results</h2>
-        <p class="text-gray-700">Found ${results.length} products for "${query}".</p>
+        <p class="text-gray-700">Searching for products containing "${query}"...</p>
         <button onclick="this.parentNode.remove()" class="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">OK</button>
       `;
       document.body.appendChild(messageBox);
     }, 1000);
   };
-
- 
-
-  const categories = [
-    { title: 'Batteries', image: batteryImage },
-    { title: 'Adapters', image: adaptersImage },
-    { title: 'Docking Station', image: dockingImage },
-    { title: 'Locks', image: locksImage },
-    { title: 'Headphones', image: headPhonesImage },
-    { title: 'Mouse', image: mouseImage },
-    { title: 'Screens', image: screenImage },
-    { title: 'Privacy Filters', image: privacyImage },
-    { title: 'Stands', image: standImage },
-    { title: 'Bags', image: bagImage },
-    { title: 'Webcams', image: webcamImage },
-    { title: 'Cables', image: cableImage },
-  ];
 
   const testimonials = [
     { quote: "The products are high quality and the prices are unbeatable. We're a customer for life!", author: "Suresh Gupta", company: "Tech Solutions Pvt. Ltd." },
@@ -115,7 +134,7 @@ const HomePage = () => {
                 }
 
                 .animate-scroll {
-                  animation: scroll 20s linear infinite;
+                  animation: scroll 40s linear infinite;
                 }
               `}
             </style>
@@ -125,13 +144,17 @@ const HomePage = () => {
                 ref={scrollContainerRef}
                 style={{ animationPlayState: isPaused ? 'paused' : 'running' }}>
                 {/* We double the categories array to create a seamless loop */}
-                {categories.concat(categories).map((cat, index) => (
-                  <CategoryCard key={index} title={cat.title} image={cat.image} />
+                {CATEGORIES.concat(CATEGORIES).map((cat, index) => (
+                  <CategoryCard 
+                    key={index} 
+                    title={cat.title} 
+                    image={cat.image} 
+                    // Pass navigation logic to CategoryCard
+                    onClick={() => navigate('products', cat.collection)} 
+                  />
                 ))}
               </div>
             </div>
-            {/* Scroll Buttons */}
-            
           </div>
         </div>
       </section>
@@ -140,11 +163,15 @@ const HomePage = () => {
       <section className="bg-gray-100 py-16">
         <div className="container mx-auto px-4">
           <h2 className="text-3xl font-bold text-center text-gray-900 mb-8">Best Sellers</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {products.map(p => (
-              <ProductCard key={p.id} name={p.name} price={p.price} image={p.image} />
-            ))}
-          </div>
+          {products.length === 0 ? (
+            <p className="text-center text-gray-500">Loading top products or no products found.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+              {products.map(p => (
+                <ProductCard key={p.id} name={p.name} price={p.price} image={p.image} brand={p.brand} />
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

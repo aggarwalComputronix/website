@@ -1,72 +1,128 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from './supabaseClient';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import HomePage from './pages/HomePage';
 import ProductsPage from './pages/ProductsPage';
 import ShopAllPage from './pages/ShopAllPage';
-import ContactPage from './pages/ContactPage';
 import AdminDashboard from './pages/AdminDashboard';
-import LoginComponent from './pages/LoginComponent';
+import AuthPage from './pages/AuthPage';
 import './index.css';
 
 const App = () => {
   const [currentPage, setCurrentPage] = useState('home');
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [showLogin, setShowLogin] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState(null); // New state to track category
+  const [session, setSession] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const handleLogin = (email) => {
-    if (email === 'admin@aggarwal.com') {
+  // Custom navigation function to handle setting the category when going to the 'products' page
+  const navigateToPage = (page, categoryName = null) => {
+    setCurrentPage(page);
+    setSelectedCategory(categoryName); // Set category name if provided
+  };
+
+  // Function to fetch user's role from the profiles table
+  const checkAdminStatus = async (userId) => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', userId)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      console.error('Error fetching admin status:', error);
+      setIsAdmin(false);
+    }
+    
+    if (data && data.role === 'admin') {
       setIsAdmin(true);
-      setCurrentPage('admin');
+      if (currentPage === 'admin') navigateToPage('admin');
     } else {
       setIsAdmin(false);
-      setCurrentPage('home');
+      if (currentPage === 'admin') navigateToPage('home');
     }
-    setIsLoggedIn(true);
-    setShowLogin(false);
+  };
+  
+  useEffect(() => {
+    // 1. Initial check on app load
+    const initialLoad = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setSession(session);
+      if (session) {
+        await checkAdminStatus(session.user.id);
+      }
+      setLoading(false);
+    };
+
+    // 2. Listener for auth state changes (login, logout, token refresh)
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setSession(session);
+        if (session) {
+          checkAdminStatus(session.user.id);
+        } else {
+          setIsAdmin(false);
+          navigateToPage('home'); // Redirect to home on logout
+        }
+      }
+    );
+
+    initialLoad();
+    
+    // Cleanup the listener when the component unmounts
+    return () => {
+      if (authListener) authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (!error) {
+      navigateToPage('home');
+    } else {
+      alert('Logout failed: ' + error.message);
+    }
   };
 
-  const handleLogout = () => {
-    setIsLoggedIn(false);
-    setIsAdmin(false);
-    setCurrentPage('home');
-  };
+  if (loading) {
+    return <div className="text-center py-20 text-4xl font-extrabold text-indigo-600">Loading Application...</div>;
+  }
 
   const renderPage = () => {
+    if (!session) {
+      return <AuthPage />;
+    }
     if (isAdmin && currentPage === 'admin') {
       return <AdminDashboard />;
     }
+    
     switch (currentPage) {
       case 'home':
-        return <HomePage />;
+        // Pass the new navigation function to HomePage
+        return <HomePage setCurrentPage={navigateToPage} />; 
       case 'products':
-        return <ProductsPage />;
+        // Pass the selectedCategory to the ProductsPage for filtering
+        return <ProductsPage selectedCategory={selectedCategory} />;
       case 'shopall':
         return <ShopAllPage />;
-      case 'contact':
-        return <ContactPage />;
-      case 'login':
-        return <LoginComponent onLogin={handleLogin} />;
+      case 'admin':
+        // Non-admin user trying to view admin page is redirected (via checkAdminStatus)
+        return <HomePage setCurrentPage={navigateToPage} />;
       default:
-        return <HomePage />;
+        return <HomePage setCurrentPage={navigateToPage} />;
     }
   };
 
   return (
-    <div className="bg-gray-50 font-sans antialiased text-gray-800">
+    <div className="min-h-screen flex flex-col bg-gray-50">
       <Header
-        setCurrentPage={setCurrentPage}
-        isMenuOpen={isMenuOpen}
-        setIsMenuOpen={setIsMenuOpen}
-        isLoggedIn={isLoggedIn}
+        setCurrentPage={navigateToPage}
+        isLoggedIn={!!session}
         isAdmin={isAdmin}
         handleLogout={handleLogout}
-        showLogin={showLogin}
-        setShowLogin={setShowLogin}
       />
-      <main>
+      <main className="flex-grow">
         {renderPage()}
       </main>
       <Footer />

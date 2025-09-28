@@ -1,34 +1,111 @@
-import React from 'react';
-import { DUMMY_SUPABASE_DATA } from '../mockSupabase';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 import ProductCard from '../components/ProductCard';
 
-const ProductsPage = () => {
-  const originalProducts = DUMMY_SUPABASE_DATA.products.filter(p => p.type === 'original');
-  const compatibleProducts = DUMMY_SUPABASE_DATA.products.filter(p => p.type === 'compatible');
+const ProductsPage = ({ selectedCategory }) => {
+  const [products, setProducts] = useState([]);
+  const [uniqueBrands, setUniqueBrands] = useState([]);
+  const [selectedBrand, setSelectedBrand] = useState('All');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      setLoading(true);
+      setError(null);
+      
+      let query = supabase
+        .from('products')
+        .select('id, name, price, "productImageUrl", brand, collection');
+
+      // 1. Filter by the initial Category (required)
+      if (selectedCategory) {
+        query = query.eq('collection', selectedCategory);
+      }
+      
+      // 2. Filter by the selected Brand (optional)
+      if (selectedBrand !== 'All') {
+        query = query.eq('brand', selectedBrand);
+      }
+
+      const { data: productsData, error: fetchError } = await query;
+
+      if (fetchError) {
+        console.error("Error fetching products:", fetchError);
+        setError("Failed to load products. Please check the database connection.");
+        setProducts([]);
+        setUniqueBrands([]);
+      } else {
+        // Map data to match ProductCard structure
+        const mappedProducts = productsData.map(p => ({
+            id: p.id,
+            name: p.name,
+            price: p.price,
+            image: p.productImageUrl,
+            brand: p.brand,
+            collection: p.collection, // Keep collection for brand filtering logic below
+        }));
+        setProducts(mappedProducts);
+
+        // Extract unique brands from the fetched data
+        const brands = [...new Set(mappedProducts.map(p => p.brand).filter(b => b))];
+        setUniqueBrands(brands);
+      }
+      setLoading(false);
+    };
+
+    fetchProducts();
+  }, [selectedCategory, selectedBrand]); // Re-run fetch when category or brand changes
+
+  const displayTitle = selectedCategory ? `${selectedCategory} Products` : "All Products";
 
   return (
-    <section className="container mx-auto px-4 py-16 space-y-16">
-      <div>
-        <h1 className="text-4xl font-extrabold text-center text-gray-900 mb-4">Original Products</h1>
-        <p className="text-lg text-center text-gray-600 max-w-2xl mx-auto mb-12">
-          Browse our collection of authentic products directly from the brand.
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-          {originalProducts.map((product) => (
-            <ProductCard key={product.id} name={product.name} price={product.price} image={product.image} />
+    <section className="container mx-auto px-4 py-12 min-h-[60vh]">
+      <h1 className="text-4xl font-extrabold text-gray-900 mb-8 text-center border-b pb-4">
+        {displayTitle}
+      </h1>
+      
+      {/* Filter Bar */}
+      <div className="mb-8 flex justify-center space-x-4">
+        <label htmlFor="brand-filter" className="text-lg font-medium text-gray-700 self-center">Filter by Brand:</label>
+        <select
+          id="brand-filter"
+          value={selectedBrand}
+          onChange={(e) => setSelectedBrand(e.target.value)}
+          className="p-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors"
+        >
+          <option value="All">All Brands</option>
+          {uniqueBrands.map((brand) => (
+            <option key={brand} value={brand}>
+              {brand}
+            </option>
           ))}
-        </div>
+        </select>
       </div>
-      <div>
-        <h1 className="text-4xl font-extrabold text-center text-gray-900 mb-4">Compatible Products</h1>
-        <p className="text-lg text-center text-gray-600 max-w-2xl mx-auto mb-12">
-          High-quality, reliable, and cost-effective alternatives.
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-          {compatibleProducts.map((product) => (
-            <ProductCard key={product.id} name={product.name} price={product.price} image={product.image} />
-          ))}
+      {/* End Filter Bar */}
+
+      {loading && (
+        <div className="text-center py-10">
+          <p className="text-indigo-600 font-semibold">Loading products...</p>
         </div>
+      )}
+
+      {error && (
+        <div className="text-center py-10 text-red-600">
+          <p>{error}</p>
+        </div>
+      )}
+
+      {!loading && products.length === 0 && !error && (
+        <div className="text-center py-10 text-gray-500">
+          <p>No products found matching the current filter settings.</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+        {products.map(p => (
+          <ProductCard key={p.id} name={p.name} price={p.price} image={p.image} brand={p.brand} />
+        ))}
       </div>
     </section>
   );
