@@ -69,23 +69,14 @@ const HomePage = ({ setCurrentPage: navigate }) => {
   }, []);
 
   const handleSearch = () => {
-    // --- SEARCH LOGIC ---
-    setIsSearching(true);
-    console.log(`Searching for: ${query}`);
-    
-    setTimeout(() => {
-      setIsSearching(false);
-      // Dummy search results message 
-      const messageBox = document.createElement('div');
-      messageBox.className = 'fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-lg shadow-xl border border-gray-200 text-center';
-      messageBox.innerHTML = `
-        <h2 class="text-2xl font-bold mb-2 text-indigo-600">Search Results</h2>
-        <p class="text-gray-700">Searching for products containing "${query}"...</p>
-        <button onclick="this.parentNode.remove()" class="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">OK</button>
-      `;
-      document.body.appendChild(messageBox);
-    }, 1000);
+    if (!query.trim()) {
+        // Do nothing if the search query is empty
+        return; 
+    }
+    // Navigate to 'shopall' page and pass the query as the search term
+    navigate('shopall', null, query.trim()); 
   };
+
 
   const testimonials = [
     { quote: "The products are high quality and the prices are unbeatable. We're a customer for life!", author: "Suresh Gupta", company: "Tech Solutions Pvt. Ltd." },
@@ -116,9 +107,9 @@ const HomePage = ({ setCurrentPage: navigate }) => {
             <button
               onClick={handleSearch}
               className="bg-indigo-600 text-white font-bold py-3 px-6 rounded-full hover:bg-indigo-700 transition"
-              disabled={isSearching}
+              disabled={isSearching || query.trim() === ''} // Disable button if empty
             >
-              {isSearching ? 'Searching...' : 'Search'}
+              Search
             </button>
           </div>
           

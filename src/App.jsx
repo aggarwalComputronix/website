@@ -11,15 +11,20 @@ import './index.css';
 
 const App = () => {
   const [currentPage, setCurrentPage] = useState('home');
-  const [selectedCategory, setSelectedCategory] = useState(null); // New state to track category
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [searchTerm, setSearchTerm] = useState(null); // NEW: State to store global search term
   const [session, setSession] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Custom navigation function to handle setting the category when going to the 'products' page
-  const navigateToPage = (page, categoryName = null) => {
+  // Custom navigation function: navigateToPage(page, categoryName, searchTerm)
+  const navigateToPage = (page, categoryName = null, query = null) => {
+    // 1. Reset category and search term on any navigation unless explicitly set
+    setSelectedCategory(categoryName); 
+    setSearchTerm(query); 
+    
+    // 2. Set the current page
     setCurrentPage(page);
-    setSelectedCategory(categoryName); // Set category name if provided
   };
 
   // Function to fetch user's role from the profiles table
@@ -105,7 +110,8 @@ const App = () => {
         // Pass the selectedCategory to the ProductsPage for filtering
         return <ProductsPage selectedCategory={selectedCategory} />;
       case 'shopall':
-        return <ShopAllPage />;
+        // Pass the search term to the ShopAllPage for search filtering
+        return <ShopAllPage searchTerm={searchTerm} />;
       case 'admin':
         // Non-admin user trying to view admin page is redirected (via checkAdminStatus)
         return <HomePage setCurrentPage={navigateToPage} />;
