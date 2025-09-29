@@ -27,24 +27,29 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
       
       let query = supabase
         .from('products')
-        .select('id, name, price, "productImageUrl", brand');
+        .select('id, name, price, "productImageUrl", brand, sku, description'); // Select description for filtering
 
       // 1. Apply CATEGORY filter if one is selected (from the dropdown)
       if (selectedFilter !== 'All') {
         query = query.eq('collection', selectedFilter); 
       }
       
-      // 2. Apply comprehensive SEARCH TERM filter if present
+      // 2. Apply Full-Text Search (FTS) filter if present
       if (currentQuery) {
-        // --- NEW: Search across Name, Brand, SKU, Collection, and Description ---
         const searchString = currentQuery.trim().toLowerCase();
-        query = query.or(
-          `name.ilike.%${searchString}%,` +
-          `brand.ilike.%${searchString}%,` +
-          `collection.ilike.%${searchString}%,` +
-          `sku.ilike.%${searchString}%,` +
-          `description.ilike.%${searchString}%`
-        );
+        
+        // FTS Query: Use terms joined by OR (|) with the partial matching operator (for speed)
+        const ftsTerms = searchString.split(/\s+/).filter(t => t.length > 0).map(t => `${t}:*`).join(' | ');
+
+        // ILIKE Fallback: Create a super-aggressive ILIKE pattern for max recall
+        // This looks for ANY combination of search words in ANY order within the name/description
+        const ilikePattern = `%${searchString.replace(/\s+/g, '%')}%`; 
+        
+        // --- FINAL AGGRESSIVE SEARCH COMBINATION ---
+        const combinedQuery = `tsv_search.fts.${ftsTerms} | name.ilike.${ilikePattern} | description.ilike.${ilikePattern}`;
+        
+        // Use the .or() method to ensure either the FTS or the aggressive ILIKE finds a match.
+        query = query.or(combinedQuery);
       }
       
       const { data, error } = await query;
