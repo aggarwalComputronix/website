@@ -1,19 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import ProductCard from '../components/ProductCard';
-import { CATEGORIES } from './HomePage'; // Import the category list
+import BackButton from '../components/BackButton';
+import LoadingSpinner from '../components/LoadingSpinner';
+import { CATEGORIES } from './HomePage';
 
-// This component now receives the search term from App.jsx
-const ShopAllPage = ({ searchTerm }) => {
+// This component now receives the search term and navigation function from App.jsx
+const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  // Initialize category filter based on whether a search term is present
   const [selectedFilter, setSelectedFilter] = useState('All'); 
   const [currentQuery, setCurrentQuery] = useState(searchTerm || '');
 
   useEffect(() => {
-    // If a search term is passed from the homepage, use it as the current query
+    // If a search term is passed from the homepage, initialize the query state
     if (searchTerm) {
         setCurrentQuery(searchTerm);
     }
@@ -33,10 +34,17 @@ const ShopAllPage = ({ searchTerm }) => {
         query = query.eq('collection', selectedFilter); 
       }
       
-      // 2. Apply SEARCH TERM filter if present (from the homepage search bar)
+      // 2. Apply comprehensive SEARCH TERM filter if present
       if (currentQuery) {
-        // Use an OR condition to search both name and brand columns
-        query = query.or(`name.ilike.%${currentQuery}%,brand.ilike.%${currentQuery}%`);
+        // --- NEW: Search across Name, Brand, SKU, Collection, and Description ---
+        const searchString = currentQuery.trim().toLowerCase();
+        query = query.or(
+          `name.ilike.%${searchString}%,` +
+          `brand.ilike.%${searchString}%,` +
+          `collection.ilike.%${searchString}%,` +
+          `sku.ilike.%${searchString}%,` +
+          `description.ilike.%${searchString}%`
+        );
       }
       
       const { data, error } = await query;
@@ -67,8 +75,11 @@ const ShopAllPage = ({ searchTerm }) => {
     : "Shop All Products";
 
   return (
-    <section className="container mx-auto px-4 py-12 min-h-[60vh]">
-      <h1 className="text-4xl font-extrabold text-gray-900 mb-8 text-center border-b pb-4">
+    <section className="relative container mx-auto px-4 py-12 min-h-[60vh]">
+      {/* Back Button positioned relative to this section */}
+      <BackButton setCurrentPage={setCurrentPage} /> 
+      
+      <h1 className="text-4xl font-extrabold text-gray-900 mb-8 text-center border-b pb-4 pt-12 md:pt-0">
         {displayTitle}
       </h1>
       
@@ -107,9 +118,7 @@ const ShopAllPage = ({ searchTerm }) => {
       {/* End Filter Bar */}
 
       {loading && (
-        <div className="text-center py-10">
-          <p className="text-indigo-600 font-semibold">Loading results...</p>
-        </div>
+        <LoadingSpinner text="Searching Inventory..." />
       )}
 
       {error && (
@@ -124,11 +133,13 @@ const ShopAllPage = ({ searchTerm }) => {
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-        {products.map(p => (
-          <ProductCard key={p.id} name={p.name} price={p.price} image={p.image} brand={p.brand} />
-        ))}
-      </div>
+      {!loading && products.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+            {products.map(p => (
+              <ProductCard key={p.id} name={p.name} price={p.price} image={p.productImageUrl} brand={p.brand} />
+            ))}
+        </div>
+      )}
     </section>
   );
 };

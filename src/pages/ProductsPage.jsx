@@ -1,17 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import ProductCard from '../components/ProductCard';
+import BackButton from '../components/BackButton'; // Import the BackButton
+import LoadingSpinner from '../components/LoadingSpinner'; // Import the LoadingSpinner
 
 // Mapping table for common category variations in the database
 const CATEGORY_MAPPINGS = {
   'Batteries': ['Batteries', 'Laptop Battery', 'Battery'],
   'Adapters': ['Adapters', 'Laptop Adapter', 'Adapter'],
   'Docking Station': ['Docking Station', 'DockingStation'],
-  // Add other categories here if needed
-  // If the category isn't mapped, it will default to searching for the exact title.
+  'Locks': ['Locks', 'Cable Lock'],
+  'Headphones': ['Headphones', 'Headset'],
+  'Mouse': ['Mouse', 'Computer Mouse'],
+  'Screens': ['Screens', 'All In One Screens', 'Laptop Screen'],
+  'Privacy Filters': ['Privacy Filters', 'Privacy Filter'],
+  'Stands': ['Stands', 'Laptop Stand'],
+  'Bags': ['Bags', 'Laptop Bag'],
+  'Webcams': ['Webcams', 'Webcam'],
+  'Cables': ['Cables', 'Cable'],
 };
 
-const ProductsPage = ({ selectedCategory }) => {
+const ProductsPage = ({ selectedCategory, setCurrentPage }) => {
   const [products, setProducts] = useState([]);
   const [uniqueBrands, setUniqueBrands] = useState([]);
   const [selectedBrand, setSelectedBrand] = useState('All');
@@ -29,7 +38,7 @@ const ProductsPage = ({ selectedCategory }) => {
 
       // --- 1. Filter by Category (Handling Mismatches) ---
       if (selectedCategory) {
-        // Get the list of all possible names for this category (e.g., ['Batteries', 'Laptop Battery'])
+        // Get the list of all possible names for this category 
         const categoryList = CATEGORY_MAPPINGS[selectedCategory] || [selectedCategory]; 
         
         // Use the .in() filter to check if the 'collection' is ANY of the names in the list
@@ -73,8 +82,11 @@ const ProductsPage = ({ selectedCategory }) => {
   const displayTitle = selectedCategory ? `${selectedCategory} Products` : "All Products";
 
   return (
-    <section className="container mx-auto px-4 py-12 min-h-[60vh]">
-      <h1 className="text-4xl font-extrabold text-gray-900 mb-8 text-center border-b pb-4">
+    <section className="relative container mx-auto px-4 py-12 min-h-[60vh]">
+      {/* Back Button positioned relative to this section */}
+      <BackButton setCurrentPage={setCurrentPage} />
+      
+      <h1 className="text-4xl font-extrabold text-gray-900 mb-8 text-center border-b pb-4 pt-12 md:pt-0">
         {displayTitle}
       </h1>
       
@@ -98,9 +110,7 @@ const ProductsPage = ({ selectedCategory }) => {
       {/* End Filter Bar */}
 
       {loading && (
-        <div className="text-center py-10">
-          <p className="text-indigo-600 font-semibold">Loading products...</p>
-        </div>
+        <LoadingSpinner text={`Loading ${selectedCategory ? selectedCategory : 'All'} products...`} />
       )}
 
       {error && (
@@ -115,11 +125,13 @@ const ProductsPage = ({ selectedCategory }) => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-        {products.map(p => (
-          <ProductCard key={p.id} name={p.name} price={p.price} image={p.image} brand={p.brand} />
-        ))}
-      </div>
+      {!loading && products.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+          {products.map(p => (
+            <ProductCard key={p.id} name={p.name} price={p.price} image={p.image} brand={p.brand} />
+          ))}
+        </div>
+      )}
     </section>
   );
 };

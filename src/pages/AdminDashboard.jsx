@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
+import BackButton from '../components/BackButton'; // Import the BackButton
 
 // Helper function to safely parse Excel values into their expected types
 const parseValue = (value, targetType) => {
@@ -42,7 +43,7 @@ const parseValue = (value, targetType) => {
 };
 
 
-const AdminDashboard = () => {
+const AdminDashboard = ({ setCurrentPage }) => {
   const [file, setFile] = useState(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -170,21 +171,21 @@ const AdminDashboard = () => {
   
   // --- DELETE PRODUCT LOGIC ---
   const handleDelete = async (productId, productName) => {
+    // Custom confirmation dialogue (replaces window.confirm)
     const confirmDelete = await new Promise(resolve => {
         const messageBox = document.createElement('div');
-        messageBox.className = 'fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-lg shadow-xl border border-gray-200 text-center z-50';
+        messageBox.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
         messageBox.innerHTML = `
-            <h2 class="text-2xl font-bold mb-2 text-red-600">Confirm Deletion</h2>
-            <p class="text-gray-700 mb-4">Are you sure you want to delete "${productName}"?</p>
-            <div class="flex justify-center space-x-4">
-                <button onclick="document.getElementById('confirm-box-container').remove(); resolve(true);" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">Yes, Delete</button>
-                <button onclick="document.getElementById('confirm-box-container').remove(); resolve(false);" class="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 transition">Cancel</button>
+            <div id="confirm-box" class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-sm space-y-4 text-center">
+                <h2 class="text-2xl font-bold mb-2 text-red-600">Confirm Deletion</h2>
+                <p class="text-gray-700 mb-4">Are you sure you want to delete <strong>${productName}</strong>?</p>
+                <div class="flex justify-center space-x-4">
+                    <button onclick="document.getElementById('confirm-box').parentNode.remove(); resolve(true);" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">Yes, Delete</button>
+                    <button onclick="document.getElementById('confirm-box').parentNode.remove(); resolve(false);" class="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 transition">Cancel</button>
+                </div>
             </div>
         `;
-        const container = document.createElement('div');
-        container.id = 'confirm-box-container';
-        container.appendChild(messageBox);
-        document.body.appendChild(container);
+        document.body.appendChild(messageBox);
     });
 
     if (!confirmDelete) {
@@ -213,7 +214,9 @@ const AdminDashboard = () => {
   );
 
   return (
-    <section className="container mx-auto px-4 py-16">
+    <section className="relative container mx-auto px-4 py-16">
+      <BackButton setCurrentPage={setCurrentPage} />
+      
       <div className="max-w-6xl mx-auto bg-white p-8 md:p-12 rounded-2xl shadow-lg border border-gray-200">
         <h1 className="text-4xl font-extrabold text-center text-gray-900 mb-8">Admin Dashboard</h1>
         

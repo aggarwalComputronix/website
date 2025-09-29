@@ -1,31 +1,39 @@
-import React from 'react';
+import React, { useState } from 'react';
 
-const Header = ({ setCurrentPage, isMenuOpen, setIsMenuOpen, isLoggedIn, isAdmin, handleLogout, setShowLogin }) => {
-  const navItems = [
-    { name: 'Home', page: 'home' },
-    { name: 'Products', page: 'products' },
-    { name: 'Shop All', page: 'shopall' },
-  ];
-
-  const handleNavClick = (page) => {
-    setCurrentPage(page);
+// The component receives the unified navigation function: setCurrentPage
+const Header = ({ setCurrentPage, isLoggedIn, isAdmin, handleLogout }) => {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  
+  // Note: navigateToPage is alias for setCurrentPage
+  const navigateToPage = (page) => {
+    // setCurrentPage is the function passed from App.jsx's navigateToPage
+    setCurrentPage(page); 
     setIsMenuOpen(false);
   };
+
+  const navItems = [
+    { name: 'Home', page: 'home' },
+    { name: 'Products', page: 'shopall' }, // Navigate to shopall for general product view
+    { name: 'Shop All', page: 'shopall' },
+  ];
 
   return (
     <header className="sticky top-0 z-50 bg-white shadow-lg backdrop-blur-sm bg-opacity-80 rounded-full">
       <div className="container mx-auto px-4 py-4 md:py-6 flex items-center justify-between">
-        {/* Logo, Company Name, and Worldwide Delivery */}
-        <div className="flex items-center space-x-4">
-          <button onClick={() => handleNavClick('home')} className="flex items-center space-x-2">
-            <img src="/icons/logo.png" alt="Aggarwal Computronix Logo" className="h-10 w-10" />
+        
+        {/* Logo and Branding */}
+        <div className="flex items-center space-x-6">
+          <button onClick={() => navigateToPage('home')} className="flex items-center space-x-2">
+            {/* Using image tag for logo */}
+            <img src="/icons/logo.png" alt="Aggarwal Computronix Logo" className="h-8 w-8" />
             <span className="hidden sm:block text-2xl font-bold text-gray-900">Aggarwal Computronix</span>
             <span className="sm:hidden text-2xl font-bold text-gray-900">A. Computronix</span>
           </button>
           
           {/* Worldwide Delivery Icon and Text */}
           <div className="hidden sm:flex items-center space-x-2 text-sm text-gray-600">
-            <img src="/icons/deliver-truck.png" alt="Worldwide Delivery" className="h-10 w-10 text-red-500" />
+            {/* Using image tag for delivery icon */}
+            <img src="/icons/deliver-truck.png" alt="Worldwide Delivery" className="h-8 w-8 text-red-500" />
             <div>
               <p className="text-sm font-semibold text-gray-800">Get</p>
               <p className="text-xs text-gray-600">Worldwide Delivery</p>
@@ -33,46 +41,50 @@ const Header = ({ setCurrentPage, isMenuOpen, setIsMenuOpen, isLoggedIn, isAdmin
           </div>
         </div>
 
-        {/* Main Navigation */}
-        <nav className="hidden md:flex justify-center flex-1 space-x-8">
+        {/* Main Navigation Links */}
+        <nav className="hidden md:flex flex-1 justify-end mr-8 space-x-8">
           {navItems.map((item) => (
             <button
               key={item.name}
-              onClick={() => handleNavClick(item.page)}
+              onClick={() => navigateToPage(item.page)}
               className="text-gray-600 hover:text-indigo-600 transition-colors duration-300 font-medium"
             >
               {item.name}
             </button>
           ))}
+          {isAdmin && (
+            <button
+              onClick={() => navigateToPage('admin')}
+              className="text-gray-600 hover:text-indigo-600 transition-colors duration-300 font-medium"
+            >
+              Admin Dashboard
+            </button>
+          )}
         </nav>
 
-        {/* Login and Profile Buttons */}
+        {/* Login/Profile Buttons (Out of Nav) */}
         <div className="flex items-center space-x-4">
           {isLoggedIn ? (
-            <>
-              {isAdmin && (
-                <button
-                  onClick={() => setCurrentPage('admin')}
-                  className="hidden md:block text-gray-600 hover:text-indigo-600 font-medium"
-                >
-                  Admin Dashboard
-                </button>
-              )}
-              <button
-                onClick={handleLogout}
-                className="bg-red-500 text-white font-bold py-2 px-4 rounded-full shadow-md hover:bg-red-600 transition-colors"
-              >
-                Logout
-              </button>
-            </>
+            <button
+              onClick={handleLogout}
+              className="bg-red-500 text-white font-bold py-2 px-4 rounded-full shadow-md hover:bg-red-600 transition-colors"
+            >
+              Logout
+            </button>
           ) : (
             <>
+              {/* FIXED: Added onClick handler to navigate to the 'login' page */}
               <button
-                onClick={() => setShowLogin(true)}
-                className="bg-indigo-600 text-white font-bold py-2 px-4 rounded-full shadow-md hover:bg-indigo-700 transition-colors">
+                onClick={() => navigateToPage('login')} 
+                className="bg-indigo-600 text-white font-bold py-2 px-4 rounded-full shadow-md hover:bg-indigo-700 transition-colors"
+              >
                 Login
               </button>
-              <button className="hidden md:block bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-full shadow-md hover:bg-gray-300 transition-colors">
+              {/* FIXED: Added onClick handler to navigate to the 'createprofile' page */}
+              <button 
+                onClick={() => navigateToPage('createprofile')} 
+                className="hidden md:block bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-full shadow-md hover:bg-gray-300 transition-colors"
+              >
                 Create Profile
               </button>
             </>
@@ -100,27 +112,36 @@ const Header = ({ setCurrentPage, isMenuOpen, setIsMenuOpen, isLoggedIn, isAdmin
             {navItems.map((item) => (
               <button
                 key={item.name}
-                onClick={() => handleNavClick(item.page)}
+                onClick={() => navigateToPage(item.page)}
                 className="text-gray-700 hover:bg-gray-100 px-4 py-2 rounded-lg text-left"
               >
                 {item.name}
               </button>
             ))}
-            {!isLoggedIn && (
-              <button
-                onClick={() => handleNavClick('login')}
-                className="text-gray-700 hover:bg-gray-100 px-4 py-2 rounded-lg text-left"
-              >
-                Login
-              </button>
-            )}
             {isAdmin && (
               <button
-                onClick={() => handleNavClick('admin')}
+                onClick={() => navigateToPage('admin')}
                 className="text-gray-700 hover:bg-gray-100 px-4 py-2 rounded-lg text-left"
               >
                 Admin Dashboard
               </button>
+            )}
+            {!isLoggedIn && (
+              <>
+                {/* FIXED: Added onClick handlers to mobile menu buttons */}
+                <button
+                  onClick={() => navigateToPage('login')}
+                  className="text-gray-700 hover:bg-gray-100 px-4 py-2 rounded-lg text-left"
+                >
+                  Login
+                </button>
+                <button
+                  onClick={() => navigateToPage('createprofile')}
+                  className="text-gray-700 hover:bg-gray-100 px-4 py-2 rounded-lg text-left"
+                >
+                  Create Profile
+                </button>
+              </>
             )}
           </nav>
         </div>
