@@ -2,6 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import ProductCard from '../components/ProductCard';
 
+// Mapping table for common category variations in the database
+const CATEGORY_MAPPINGS = {
+  'Batteries': ['Batteries', 'Laptop Battery', 'Battery'],
+  'Adapters': ['Adapters', 'Laptop Adapter', 'Adapter'],
+  'Docking Station': ['Docking Station', 'DockingStation'],
+  // Add other categories here if needed
+  // If the category isn't mapped, it will default to searching for the exact title.
+};
+
 const ProductsPage = ({ selectedCategory }) => {
   const [products, setProducts] = useState([]);
   const [uniqueBrands, setUniqueBrands] = useState([]);
@@ -18,12 +27,16 @@ const ProductsPage = ({ selectedCategory }) => {
         .from('products')
         .select('id, name, price, "productImageUrl", brand, collection');
 
-      // 1. Filter by the initial Category (required)
+      // --- 1. Filter by Category (Handling Mismatches) ---
       if (selectedCategory) {
-        query = query.eq('collection', selectedCategory);
+        // Get the list of all possible names for this category (e.g., ['Batteries', 'Laptop Battery'])
+        const categoryList = CATEGORY_MAPPINGS[selectedCategory] || [selectedCategory]; 
+        
+        // Use the .in() filter to check if the 'collection' is ANY of the names in the list
+        query = query.in('collection', categoryList);
       }
       
-      // 2. Filter by the selected Brand (optional)
+      // --- 2. Filter by the selected Brand (optional) ---
       if (selectedBrand !== 'All') {
         query = query.eq('brand', selectedBrand);
       }
@@ -43,7 +56,7 @@ const ProductsPage = ({ selectedCategory }) => {
             price: p.price,
             image: p.productImageUrl,
             brand: p.brand,
-            collection: p.collection, // Keep collection for brand filtering logic below
+            collection: p.collection, 
         }));
         setProducts(mappedProducts);
 
