@@ -27,29 +27,21 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
       
       let query = supabase
         .from('products')
-        .select('id, name, price, "productImageUrl", brand, sku, description'); // Select description for filtering
+        .select('id, name, price, "productImageUrl", brand');
 
       // 1. Apply CATEGORY filter if one is selected (from the dropdown)
       if (selectedFilter !== 'All') {
         query = query.eq('collection', selectedFilter); 
       }
       
-      // 2. Apply Full-Text Search (FTS) filter if present
+      // 2. Apply Targeted Search Filter if present
       if (currentQuery) {
-        const searchString = currentQuery.trim().toLowerCase();
+        // --- TARGETED SEARCH FIX: Only query the 'name' column ---
+        const searchString = currentQuery.trim();
         
-        // FTS Query: Use terms joined by OR (|) with the partial matching operator (for speed)
-        const ftsTerms = searchString.split(/\s+/).filter(t => t.length > 0).map(t => `${t}:*`).join(' | ');
-
-        // ILIKE Fallback: Create a super-aggressive ILIKE pattern for max recall
-        // This looks for ANY combination of search words in ANY order within the name/description
-        const ilikePattern = `%${searchString.replace(/\s+/g, '%')}%`; 
-        
-        // --- FINAL AGGRESSIVE SEARCH COMBINATION ---
-        const combinedQuery = `tsv_search.fts.${ftsTerms} | name.ilike.${ilikePattern} | description.ilike.${ilikePattern}`;
-        
-        // Use the .or() method to ensure either the FTS or the aggressive ILIKE finds a match.
-        query = query.or(combinedQuery);
+        // Use an aggressive ILIKE filter on the 'name' column to find fragments
+        // Example: Searching for "840 g3" will find the full name containing that string.
+        query = query.or(`name.ilike.%${searchString}%`);
       }
       
       const { data, error } = await query;
