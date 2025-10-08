@@ -27,21 +27,33 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
       
       let query = supabase
         .from('products')
-        .select('id, name, price, "productImageUrl", brand');
+        .select('id, name, price, "productImageUrl", brand'); // Select essential columns
 
       // 1. Apply CATEGORY filter if one is selected (from the dropdown)
       if (selectedFilter !== 'All') {
         query = query.eq('collection', selectedFilter); 
       }
       
-      // 2. Apply Targeted Search Filter if present
+      // 2. Apply Full Compatibility Search (simple ILIKE across all fields)
       if (currentQuery) {
-        // --- TARGETED SEARCH FIX: Only query the 'name' column ---
         const searchString = currentQuery.trim();
         
-        // Use an aggressive ILIKE filter on the 'name' column to find fragments
-        // Example: Searching for "840 g3" will find the full name containing that string.
-        query = query.or(`name.ilike.%${searchString}%`);
+        // --- FINAL BRUTE-FORCE ILIKE SEARCH ---
+        // Checks all 15+ potential text/description columns for the exact search string fragment.
+        const combinedIlikeQuery = 
+          `name.ilike.%${searchString}%,` +
+          `brand.ilike.%${searchString}%,` +
+          `sku.ilike.%${searchString}%,` +
+          `description.ilike.%${searchString}%,` +
+          `"productOptionDescription1".ilike.%${searchString}%,` +
+          `"productOptionDescription2".ilike.%${searchString}%,` +
+          `"productOptionDescription3".ilike.%${searchString}%,` +
+          `"additionalInfoDescription1".ilike.%${searchString}%,` +
+          `"additionalInfoDescription2".ilike.%${searchString}%,` +
+          `"additionalInfoDescription3".ilike.%${searchString}%`;
+        
+        // Use the .or() method to ensure we find a match in ANY of the fields.
+        query = query.or(combinedIlikeQuery);
       }
       
       const { data, error } = await query;
