@@ -5,6 +5,13 @@ import BackButton from '../components/BackButton';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { CATEGORIES } from './HomePage';
 
+// Helper function for deep data cleaning and normalization (MUST match SQL function)
+const normalizeInput = (str) => {
+    if (!str) return '';
+    // Removes spaces, hyphens, slashes, commas, and converts to lowercase
+    return String(str).toLowerCase().replace(/[\s\-\/\,]/g, '');
+};
+
 // This component now receives the search term and navigation function from App.jsx
 const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
   const [products, setProducts] = useState([]); 
@@ -24,34 +31,24 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
       setLoading(true);
       setError(null);
       
+      // Select ALL necessary columns for the filtering and search
       let query = supabase
         .from('products')
-        .select('id, name, price, "productImageUrl", brand, sku, description, "productOptionDescription1"');
+        .select('id, name, price, "productImageUrl", brand, "normalized_search"');
 
       // 1. Apply CATEGORY filter if one is selected (from the dropdown)
       if (selectedFilter !== 'All') {
         query = query.eq('collection', selectedFilter); 
       }
       
-      // 2. Apply Full Compatibility Search (Final Brute-Force ILIKE)
+      // 2. Apply FINAL GUARANTEED SEARCH using the normalized column
       if (currentQuery) {
-        const searchString = currentQuery.trim().toLowerCase();
+        // --- KEY FIX: Normalize the user's input ---
+        const cleanQuery = normalizeInput(currentQuery);
         
-        // Split terms and join with '%' wildcard for maximum fragmentation matching
-        // Example: "65w dell" becomes "%65w%dell%"
-        const fragmentedQuery = `%${searchString.replace(/\s+/g, '%')}%`;
-        
-        // Construct the full ILIKE OR filter string
-        const combinedIlikeQuery = `
-          name.ilike.${fragmentedQuery} | 
-          brand.ilike.${fragmentedQuery} | 
-          sku.ilike.${fragmentedQuery} | 
-          description.ilike.${fragmentedQuery} | 
-          "productOptionDescription1".ilike.${fragmentedQuery} 
-        `;
-        
-        // Use the .or() method to ensure we find a match in ANY of the fields.
-        query = query.or(combinedIlikeQuery);
+        // This query finds all products where the normalized_search column CONTAINS the clean query string.
+        // This ignores word order (e.g., "65wdell" matches "dell65wadapter") and special characters.
+        query = query.ilike('normalized_search', `%${cleanQuery}%`);
       }
       
       const { data, error } = await query;
@@ -68,9 +65,7 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
             price: p.price,
             image: p.productImageUrl,
             brand: p.brand,
-            sku: p.sku, // Keep relevant fields
-            description: p.description,
-            optionDesc1: p.productOptionDescription1,
+            // Only select necessary fields; full product data is available if needed.
         }));
         setProducts(mappedData);
       }
@@ -79,24 +74,6 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
 
     fetchAllProducts();
   }, [selectedFilter, currentQuery]); // Re-run the fetch whenever either filter changes
-
-
-  // --- CLIENT-SIDE FILTERING (Fallback: Remove products that were not matched by the search criteria) ---
-  const finalFilteredProducts = products.filter(product => {
-      if (!currentQuery) return true;
-      
-      // 1. Check if the product's primary data contains ALL search terms
-      const searchTerms = currentQuery.toLowerCase().split(/\s+/).filter(t => t.length > 0);
-      const productDataString = [
-          product.name, 
-          product.brand, 
-          product.sku, 
-          product.description,
-          product.optionDesc1,
-      ].join(' ').toLowerCase();
-
-      return searchTerms.every(term => productDataString.includes(term));
-  });
 
   const displayTitle = currentQuery 
     ? `Search Results for "${currentQuery}"` 
@@ -155,15 +132,15 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
         </div>
       )}
 
-      {!loading && finalFilteredProducts.length === 0 && !error && (
+      {!loading && products.length === 0 && !error && (
         <div className="text-center py-10 text-gray-500">
           <p>No products available matching the current search and category filters.</p>
         </div>
       )}
 
-      {!loading && finalFilteredProducts.length > 0 && (
+      {!loading && products.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-            {finalFilteredProducts.map(p => (
+            {products.map(p => (
               <ProductCard key={p.id} name={p.name} price={p.price} image={p.productImageUrl} brand={p.brand} />
             ))}
         </div>
