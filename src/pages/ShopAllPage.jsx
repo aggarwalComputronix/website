@@ -25,7 +25,6 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
       setLoading(true);
       setError(null);
       
-      // Start with a base query
       let query = supabase
         .from('products')
         .select('id, name, price, "productImageUrl", brand');
@@ -35,30 +34,33 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
         query = query.eq('collection', selectedFilter); 
       }
       
-      // 2. Apply Full Compatibility Search (Order-Agnostic)
+      // 2. Apply Full Compatibility Search (Order-Agnostic AND Logic)
       if (currentQuery) {
         const searchString = currentQuery.trim().toLowerCase();
         
         // Split the query into individual terms (e.g., "65w Dell" -> ["65w", "Dell"])
         const terms = searchString.split(/\s+/).filter(t => t.length > 0);
+        
+        // Array to hold individual filters for each term
+        const andFilters = [];
 
-        // --- CORE FIX: Build a filter that requires ALL search terms to be present ---
         if (terms.length > 0) {
-            // For each search term, create an ILIKE filter that checks all critical columns
             terms.forEach(term => {
-                const ilikeFilter = `
-                    name.ilike.%${term}%, 
-                    brand.ilike.%${term}%, 
-                    sku.ilike.%${term}%, 
-                    description.ilike.%${term}%, 
-                    "productOptionDescription1".ilike.%${term}%,
-                    "productOptionDescription2".ilike.%${term}%
-                `;
+                // For each term, build a complex OR filter that checks all critical columns
+                const termFilter = 
+                    `name.ilike.%${term}%,` +
+                    `brand.ilike.%${term}%,` +
+                    `sku.ilike.%${term}%,` +
+                    `description.ilike.%${term}%,` +
+                    `"productOptionDescription1".ilike.%${term}%,` +
+                    `"additionalInfoDescription1".ilike.%${term}%`;
                 
-                // Chain the filters together with the .or() method inside a .filter() call.
-                // This ensures every product must contain the first term AND the second term, etc.
-                query = query.or(ilikeFilter);
+                // Add this complex OR filter to the array
+                andFilters.push(termFilter);
             });
+
+            // The .and() function ensures every term filter is met (Term1 AND Term2 AND...)
+            query = query.filter('or', `(${andFilters.join('),(')})`); 
         }
       }
       
