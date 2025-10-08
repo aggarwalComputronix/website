@@ -31,7 +31,7 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
       setLoading(true);
       setError(null);
       
-      // Select ALL necessary columns for the filtering and search
+      // Select ALL necessary fields, including the normalized_search column
       let query = supabase
         .from('products')
         .select('id, name, price, "productImageUrl", brand, "normalized_search"');
@@ -44,6 +44,7 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
       // 2. Apply FINAL GUARANTEED SEARCH using the normalized column
       if (currentQuery) {
         // --- KEY FIX: Normalize the user's input ---
+        // Example: "65W Dell" becomes "65wdell"
         const cleanQuery = normalizeInput(currentQuery);
         
         // This query finds all products where the normalized_search column CONTAINS the clean query string.
@@ -65,7 +66,6 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
             price: p.price,
             image: p.productImageUrl,
             brand: p.brand,
-            // Only select necessary fields; full product data is available if needed.
         }));
         setProducts(mappedData);
       }
