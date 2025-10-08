@@ -7,14 +7,13 @@ import { CATEGORIES } from './HomePage';
 
 // This component now receives the search term and navigation function from App.jsx
 const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
-  const [products, setProducts] = useState([]);
+  const [products, setProducts] = useState([]); // Raw products fetched from DB
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedFilter, setSelectedFilter] = useState('All'); 
   const [currentQuery, setCurrentQuery] = useState(searchTerm || '');
 
   useEffect(() => {
-    // If a search term is passed from the homepage, initialize the query state
     if (searchTerm) {
         setCurrentQuery(searchTerm);
     }
@@ -25,43 +24,14 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
       setLoading(true);
       setError(null);
       
+      // *** 1. SIMPLIFIED DATABASE FETCH ***
+      // We only filter by category (which is reliable) and fetch all products in that category.
       let query = supabase
         .from('products')
-        .select('id, name, price, "productImageUrl", brand');
+        .select('id, name, price, "productImageUrl", brand, sku, description, "productOptionDescription1"'); // Fetch necessary fields for local search
 
-      // 1. Apply CATEGORY filter if one is selected (from the dropdown)
       if (selectedFilter !== 'All') {
         query = query.eq('collection', selectedFilter); 
-      }
-      
-      // 2. Apply Full Compatibility Search (Order-Agnostic AND Logic)
-      if (currentQuery) {
-        const searchString = currentQuery.trim().toLowerCase();
-        
-        // Split the query into individual terms (e.g., "65w Dell" -> ["65w", "Dell"])
-        const terms = searchString.split(/\s+/).filter(t => t.length > 0);
-        
-        // Array to hold individual filters for each term
-        const andFilters = [];
-
-        if (terms.length > 0) {
-            terms.forEach(term => {
-                // For each term, build a complex OR filter that checks all critical columns
-                const termFilter = 
-                    `name.ilike.%${term}%,` +
-                    `brand.ilike.%${term}%,` +
-                    `sku.ilike.%${term}%,` +
-                    `description.ilike.%${term}%,` +
-                    `"productOptionDescription1".ilike.%${term}%,` +
-                    `"additionalInfoDescription1".ilike.%${term}%`;
-                
-                // Add this complex OR filter to the array
-                andFilters.push(termFilter);
-            });
-
-            // The .and() function ensures every term filter is met (Term1 AND Term2 AND...)
-            query = query.filter('or', `(${andFilters.join('),(')})`); 
-        }
       }
       
       const { data, error } = await query;
@@ -78,6 +48,9 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
             price: p.price,
             image: p.productImageUrl,
             brand: p.brand,
+            sku: p.sku,
+            description: p.description,
+            optionDesc1: p.productOptionDescription1, // Fetch fields needed for local search
         }));
         setProducts(mappedData);
       }
@@ -85,7 +58,31 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
     };
 
     fetchAllProducts();
-  }, [selectedFilter, currentQuery]); // Re-run the fetch whenever either filter changes
+  }, [selectedFilter]); // Only re-fetch from DB when the category filter changes, NOT the search query.
+
+
+  // *** 2. CLIENT-SIDE SEARCH FILTERING (GUARANTEED AND LOGIC) ***
+  const finalFilteredProducts = products.filter(product => {
+    if (!currentQuery) {
+        return true; // If no search term, show everything fetched.
+    }
+    
+    // Split the query into individual terms and check if ALL of them exist in the product details.
+    const searchTerms = currentQuery.toLowerCase().split(/\s+/).filter(t => t.length > 0);
+    
+    // Create a single search string from the product data fields
+    const productDataString = [
+        product.name, 
+        product.brand, 
+        product.sku, 
+        product.description,
+        product.optionDesc1,
+    ].join(' ').toLowerCase();
+
+    // Check if EVERY search term is included in the product's data string
+    return searchTerms.every(term => productDataString.includes(term));
+  });
+
 
   const displayTitle = currentQuery 
     ? `Search Results for "${currentQuery}"` 
@@ -144,15 +141,15 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
         </div>
       )}
 
-      {!loading && products.length === 0 && !error && (
+      {!loading && finalFilteredProducts.length === 0 && !error && (
         <div className="text-center py-10 text-gray-500">
           <p>No products available matching the current search and category filters.</p>
         </div>
       )}
 
-      {!loading && products.length > 0 && (
+      {!loading && finalFilteredProducts.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-            {products.map(p => (
+            {finalFilteredProducts.map(p => (
               <ProductCard key={p.id} name={p.name} price={p.price} image={p.productImageUrl} brand={p.brand} />
             ))}
         </div>
