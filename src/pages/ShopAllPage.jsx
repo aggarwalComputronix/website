@@ -5,16 +5,22 @@ import BackButton from '../components/BackButton';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { CATEGORIES } from './HomePage';
 
+// Helper function for deep data cleaning and normalization (MUST match SQL function)
+const normalizeInput = (str) => {
+    if (!str) return '';
+    // Removes spaces, hyphens, slashes, commas, and converts to lowercase
+    return String(str).toLowerCase().replace(/[\s\-\/\,]/g, '');
+};
+
 // This component now receives the search term and navigation function from App.jsx
 const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
-  const [products, setProducts] = useState([]);
+  const [products, setProducts] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedFilter, setSelectedFilter] = useState('All'); 
   const [currentQuery, setCurrentQuery] = useState(searchTerm || '');
 
   useEffect(() => {
-    // If a search term is passed from the homepage, initialize the query state
     if (searchTerm) {
         setCurrentQuery(searchTerm);
     }
@@ -25,23 +31,25 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
       setLoading(true);
       setError(null);
       
+      // Select ALL necessary fields, including the normalized_search column
       let query = supabase
         .from('products')
-        .select('id, name, price, "productImageUrl", brand');
+        .select('id, name, price, "productImageUrl", brand, "normalized_search"');
 
       // 1. Apply CATEGORY filter if one is selected (from the dropdown)
       if (selectedFilter !== 'All') {
         query = query.eq('collection', selectedFilter); 
       }
       
-      // 2. Apply Targeted Search Filter if present
+      // 2. Apply FINAL GUARANTEED SEARCH using the normalized column
       if (currentQuery) {
-        // --- TARGETED SEARCH FIX: Only query the 'name' column ---
-        const searchString = currentQuery.trim();
+        // --- KEY FIX: Normalize the user's input ---
+        // Example: "65W Dell" becomes "65wdell"
+        const cleanQuery = normalizeInput(currentQuery);
         
-        // Use an aggressive ILIKE filter on the 'name' column to find fragments
-        // Example: Searching for "840 g3" will find the full name containing that string.
-        query = query.or(`name.ilike.%${searchString}%`);
+        // This query finds all products where the normalized_search column CONTAINS the clean query string.
+        // This ignores word order (e.g., "65wdell" matches "dell65wadapter") and special characters.
+        query = query.ilike('normalized_search', `%${cleanQuery}%`);
       }
       
       const { data, error } = await query;

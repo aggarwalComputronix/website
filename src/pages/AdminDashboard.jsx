@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
-import BackButton from '../components/BackButton'; // Import the BackButton
+import BackButton from '../components/BackButton';
 
-// Helper function to safely parse Excel values into their expected types
+// Helper function to safely parse Excel/CSV values into their expected types
 const parseValue = (value, targetType) => {
   if (value === undefined || value === null || value === '') {
     return null;
@@ -42,6 +42,13 @@ const parseValue = (value, targetType) => {
   return String(value);
 };
 
+// Helper function for deep data cleaning and normalization (MUST match SQL function)
+const normalizeInput = (str) => {
+    if (!str) return '';
+    // Removes spaces, hyphens, slashes, commas, and converts to lowercase
+    return String(str).toLowerCase().replace(/[\s\-\/\,]/g, '');
+};
+
 
 const AdminDashboard = ({ setCurrentPage }) => {
   const [file, setFile] = useState(null);
@@ -49,14 +56,13 @@ const AdminDashboard = ({ setCurrentPage }) => {
   const [loading, setLoading] = useState(false);
   const [products, setProducts] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [editingProduct, setEditingProduct] = useState(null); // State for editing
+  const [editingProduct, setEditingProduct] = useState(null); 
 
   useEffect(() => {
     fetchProducts();
   }, []);
 
   const fetchProducts = async () => {
-    // Fetch all products from the real Supabase table
     const { data, error } = await supabase.from('products').select('*');
     if (error) {
       console.error('Error fetching products:', error);
@@ -89,9 +95,21 @@ const AdminDashboard = ({ setCurrentPage }) => {
 
     setLoading(true);
     const reader = new FileReader();
+    
     reader.onload = async (e) => {
       const data = e.target.result;
-      const workbook = XLSX.read(data, { type: 'binary' });
+      let workbook;
+
+      // Determine file type and use appropriate reader method
+      if (fileToUpload.name.endsWith('.csv')) {
+        // For CSV, read as text and use XLSX's parsing utility
+        const csvData = new TextDecoder('utf-8').decode(data);
+        workbook = XLSX.read(csvData, { type: 'string' });
+      } else {
+        // For Excel files (.xlsx, .xls), read as binary
+        workbook = XLSX.read(data, { type: 'binary' });
+      }
+      
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
       const parsedData = XLSX.utils.sheet_to_json(sheet);
@@ -150,23 +168,35 @@ const AdminDashboard = ({ setCurrentPage }) => {
         "customTextCharLimit2": parseValue(row.customTextCharLimit2, 'integer'),
         "customTextMandatory2": parseValue(row.customTextMandatory2, 'boolean'),
         "brand": parseValue(row.brand, 'text'),
+        
+        // Populate normalized search field for highly robust searching
+        "normalized_search": normalizeInput(
+            [row.name, row.sku, row.brand, row.description, row.productOptionDescription1].join(' ')
+        )
       }));
 
-      // --- SUPABASE INSERTION ---
+      // --- SUPABASE UPSERT (Update/Insert) ---
       console.log(`Attempting to upload ${mappedProducts.length} records to Supabase...`);
-      const { error } = await supabase.from('products').insert(mappedProducts);
+      // Use upsert and tell it to use the 'sku' column to check for existing records
+      const { error } = await supabase.from('products').upsert(mappedProducts, { onConflict: 'sku' });
       
       if (error) {
-        console.error('Error inserting data:', error);
-        alert('Error inserting data: ' + error.message);
+        console.error('Error uploading/updating data:', error);
+        alert('Error uploading/updating data: ' + error.message);
       } else {
-        alert('Products uploaded successfully! Total: ' + mappedProducts.length);
-        fetchProducts();
+        alert('Products uploaded and synchronized successfully! Total: ' + mappedProducts.length);
+        fetchProducts(); // Refresh list
       }
       
       setLoading(false);
     };
-    reader.readAsBinaryString(fileToUpload);
+    
+    // Determine how to read the file based on its extension
+    if (fileToUpload.name.endsWith('.csv')) {
+      reader.readAsArrayBuffer(fileToUpload);
+    } else {
+      reader.readAsBinaryString(fileToUpload);
+    }
   };
   
   // --- DELETE PRODUCT LOGIC ---
@@ -207,11 +237,15 @@ const AdminDashboard = ({ setCurrentPage }) => {
   };
 
   // --- SEARCH FILTERING ---
-  const filteredProducts = products.filter(product => 
-    product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    product.sku?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    product.brand?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredProducts = products.filter(product => {
+    if (!searchTerm) return true;
+    const searchLower = searchTerm.toLowerCase();
+    
+    // Search by Name, SKU, or Brand
+    return product.name?.toLowerCase().includes(searchLower) ||
+           product.sku?.toLowerCase().includes(searchLower) ||
+           product.brand?.toLowerCase().includes(searchLower);
+  });
 
   return (
     <section className="relative container mx-auto px-4 py-16">
@@ -226,12 +260,12 @@ const AdminDashboard = ({ setCurrentPage }) => {
             className={`border-2 border-dashed rounded-lg p-10 text-center transition-colors ${isDragOver ? 'border-indigo-600 bg-indigo-50' : 'border-gray-300 bg-gray-50'}`}
             onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
             onDragLeave={() => setIsDragOver(false)}
-            onDrop={handleDrop}
           >
             <input
               type="file"
               onChange={handleFileChange}
-              accept=".xlsx, .xls"
+              // UPDATED: Accept CSV files as well
+              accept=".xlsx, .xls, .csv"
               className="hidden"
               id="excel-file-upload"
             />
@@ -245,7 +279,7 @@ const AdminDashboard = ({ setCurrentPage }) => {
               &nbsp;or drag and drop
             </p>
             <p className="text-sm text-gray-500">
-              Excel (.xlsx) or (.xls) files only. (Adds new products to existing inventory)
+              Excel (.xlsx, .xls) or (.csv) files. (Uses SKU to update existing products)
             </p>
             {loading && (
               <div className="mt-4 text-indigo-600">Uploading and Processing...</div>
