@@ -25,35 +25,41 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
       setLoading(true);
       setError(null);
       
+      // Start with a base query
       let query = supabase
         .from('products')
-        .select('id, name, price, "productImageUrl", brand'); // Select essential columns
+        .select('id, name, price, "productImageUrl", brand');
 
       // 1. Apply CATEGORY filter if one is selected (from the dropdown)
       if (selectedFilter !== 'All') {
         query = query.eq('collection', selectedFilter); 
       }
       
-      // 2. Apply Full Compatibility Search (simple ILIKE across all fields)
+      // 2. Apply Full Compatibility Search (Order-Agnostic)
       if (currentQuery) {
-        const searchString = currentQuery.trim();
+        const searchString = currentQuery.trim().toLowerCase();
         
-        // --- FINAL BRUTE-FORCE ILIKE SEARCH ---
-        // Checks all 15+ potential text/description columns for the exact search string fragment.
-        const combinedIlikeQuery = 
-          `name.ilike.%${searchString}%,` +
-          `brand.ilike.%${searchString}%,` +
-          `sku.ilike.%${searchString}%,` +
-          `description.ilike.%${searchString}%,` +
-          `"productOptionDescription1".ilike.%${searchString}%,` +
-          `"productOptionDescription2".ilike.%${searchString}%,` +
-          `"productOptionDescription3".ilike.%${searchString}%,` +
-          `"additionalInfoDescription1".ilike.%${searchString}%,` +
-          `"additionalInfoDescription2".ilike.%${searchString}%,` +
-          `"additionalInfoDescription3".ilike.%${searchString}%`;
-        
-        // Use the .or() method to ensure we find a match in ANY of the fields.
-        query = query.or(combinedIlikeQuery);
+        // Split the query into individual terms (e.g., "65w Dell" -> ["65w", "Dell"])
+        const terms = searchString.split(/\s+/).filter(t => t.length > 0);
+
+        // --- CORE FIX: Build a filter that requires ALL search terms to be present ---
+        if (terms.length > 0) {
+            // For each search term, create an ILIKE filter that checks all critical columns
+            terms.forEach(term => {
+                const ilikeFilter = `
+                    name.ilike.%${term}%, 
+                    brand.ilike.%${term}%, 
+                    sku.ilike.%${term}%, 
+                    description.ilike.%${term}%, 
+                    "productOptionDescription1".ilike.%${term}%,
+                    "productOptionDescription2".ilike.%${term}%
+                `;
+                
+                // Chain the filters together with the .or() method inside a .filter() call.
+                // This ensures every product must contain the first term AND the second term, etc.
+                query = query.or(ilikeFilter);
+            });
+        }
       }
       
       const { data, error } = await query;
