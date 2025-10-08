@@ -5,6 +5,13 @@ import BackButton from '../components/BackButton';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { CATEGORIES } from './HomePage';
 
+// Helper function for deep data cleaning and normalization
+const normalizeString = (str) => {
+    if (!str) return '';
+    // Removes spaces, hyphens, slashes, and converts to lowercase
+    return String(str).toLowerCase().replace(/[\s\-\/\,]/g, '');
+};
+
 // This component now receives the search term and navigation function from App.jsx
 const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
   const [products, setProducts] = useState([]); // Raw products fetched from DB
@@ -24,11 +31,10 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
       setLoading(true);
       setError(null);
       
-      // *** 1. SIMPLIFIED DATABASE FETCH ***
-      // We only filter by category (which is reliable) and fetch all products in that category.
+      // Select ALL necessary columns for local filtering
       let query = supabase
         .from('products')
-        .select('id, name, price, "productImageUrl", brand, sku, description, "productOptionDescription1"'); // Fetch necessary fields for local search
+        .select('id, name, price, "productImageUrl", brand, sku, description, "productOptionDescription1"');
 
       if (selectedFilter !== 'All') {
         query = query.eq('collection', selectedFilter); 
@@ -41,7 +47,7 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
         setError("Failed to load products. Please check the database connection.");
         setProducts([]);
       } else {
-        // Map data to match ProductCard structure
+        // Map data, fetching all required compatibility fields
         const mappedData = data.map(p => ({
             id: p.id,
             name: p.name,
@@ -50,15 +56,16 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
             brand: p.brand,
             sku: p.sku,
             description: p.description,
-            optionDesc1: p.productOptionDescription1, // Fetch fields needed for local search
+            optionDesc1: p.productOptionDescription1,
         }));
         setProducts(mappedData);
       }
       setLoading(false);
     };
 
+    // We only re-fetch from DB when the category filter changes, NOT the search query.
     fetchAllProducts();
-  }, [selectedFilter]); // Only re-fetch from DB when the category filter changes, NOT the search query.
+  }, [selectedFilter]); 
 
 
   // *** 2. CLIENT-SIDE SEARCH FILTERING (GUARANTEED AND LOGIC) ***
@@ -67,20 +74,32 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
         return true; // If no search term, show everything fetched.
     }
     
-    // Split the query into individual terms and check if ALL of them exist in the product details.
-    const searchTerms = currentQuery.toLowerCase().split(/\s+/).filter(t => t.length > 0);
+    // 1. Normalize the user's search query (e.g., "65W dell" -> "65wdell")
+    const normalizedQuery = normalizeString(currentQuery);
     
-    // Create a single search string from the product data fields
+    // 2. Build and normalize the searchable product string (e.g., "Dell Latitude 65W" -> "delllatitude65w")
     const productDataString = [
         product.name, 
         product.brand, 
         product.sku, 
         product.description,
         product.optionDesc1,
-    ].join(' ').toLowerCase();
+    ].join(' '); // Join and normalize after the join
 
-    // Check if EVERY search term is included in the product's data string
-    return searchTerms.every(term => productDataString.includes(term));
+    const normalizedProductData = normalizeString(productDataString);
+
+    // 3. Guaranteed Match: Check if the product contains the clean query string
+    if (normalizedProductData.includes(normalizedQuery)) {
+        return true;
+    }
+
+    // 4. Fallback for multi-term searches: Check if the product contains ALL individual terms
+    const individualTerms = normalizedQuery.split(/\s+/).filter(t => t.length > 0);
+    if (individualTerms.length > 1) {
+        return individualTerms.every(term => normalizedProductData.includes(term));
+    }
+    
+    return false;
   });
 
 
