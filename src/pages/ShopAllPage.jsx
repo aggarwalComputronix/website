@@ -5,16 +5,9 @@ import BackButton from '../components/BackButton';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { CATEGORIES } from './HomePage';
 
-// Helper function for deep data cleaning and normalization
-const normalizeString = (str) => {
-    if (!str) return '';
-    // Removes spaces, hyphens, slashes, and converts to lowercase
-    return String(str).toLowerCase().replace(/[\s\-\/\,]/g, '');
-};
-
 // This component now receives the search term and navigation function from App.jsx
 const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
-  const [products, setProducts] = useState([]); // Raw products fetched from DB
+  const [products, setProducts] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedFilter, setSelectedFilter] = useState('All'); 
@@ -31,13 +24,34 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
       setLoading(true);
       setError(null);
       
-      // Select ALL necessary columns for local filtering
       let query = supabase
         .from('products')
         .select('id, name, price, "productImageUrl", brand, sku, description, "productOptionDescription1"');
 
+      // 1. Apply CATEGORY filter if one is selected (from the dropdown)
       if (selectedFilter !== 'All') {
         query = query.eq('collection', selectedFilter); 
+      }
+      
+      // 2. Apply Full Compatibility Search (Final Brute-Force ILIKE)
+      if (currentQuery) {
+        const searchString = currentQuery.trim().toLowerCase();
+        
+        // Split terms and join with '%' wildcard for maximum fragmentation matching
+        // Example: "65w dell" becomes "%65w%dell%"
+        const fragmentedQuery = `%${searchString.replace(/\s+/g, '%')}%`;
+        
+        // Construct the full ILIKE OR filter string
+        const combinedIlikeQuery = `
+          name.ilike.${fragmentedQuery} | 
+          brand.ilike.${fragmentedQuery} | 
+          sku.ilike.${fragmentedQuery} | 
+          description.ilike.${fragmentedQuery} | 
+          "productOptionDescription1".ilike.${fragmentedQuery} 
+        `;
+        
+        // Use the .or() method to ensure we find a match in ANY of the fields.
+        query = query.or(combinedIlikeQuery);
       }
       
       const { data, error } = await query;
@@ -47,14 +61,14 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
         setError("Failed to load products. Please check the database connection.");
         setProducts([]);
       } else {
-        // Map data, fetching all required compatibility fields
+        // Map data to match ProductCard structure
         const mappedData = data.map(p => ({
             id: p.id,
             name: p.name,
             price: p.price,
             image: p.productImageUrl,
             brand: p.brand,
-            sku: p.sku,
+            sku: p.sku, // Keep relevant fields
             description: p.description,
             optionDesc1: p.productOptionDescription1,
         }));
@@ -63,45 +77,26 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
       setLoading(false);
     };
 
-    // We only re-fetch from DB when the category filter changes, NOT the search query.
     fetchAllProducts();
-  }, [selectedFilter]); 
+  }, [selectedFilter, currentQuery]); // Re-run the fetch whenever either filter changes
 
 
-  // *** 2. CLIENT-SIDE SEARCH FILTERING (GUARANTEED AND LOGIC) ***
+  // --- CLIENT-SIDE FILTERING (Fallback: Remove products that were not matched by the search criteria) ---
   const finalFilteredProducts = products.filter(product => {
-    if (!currentQuery) {
-        return true; // If no search term, show everything fetched.
-    }
-    
-    // 1. Normalize the user's search query (e.g., "65W dell" -> "65wdell")
-    const normalizedQuery = normalizeString(currentQuery);
-    
-    // 2. Build and normalize the searchable product string (e.g., "Dell Latitude 65W" -> "delllatitude65w")
-    const productDataString = [
-        product.name, 
-        product.brand, 
-        product.sku, 
-        product.description,
-        product.optionDesc1,
-    ].join(' '); // Join and normalize after the join
+      if (!currentQuery) return true;
+      
+      // 1. Check if the product's primary data contains ALL search terms
+      const searchTerms = currentQuery.toLowerCase().split(/\s+/).filter(t => t.length > 0);
+      const productDataString = [
+          product.name, 
+          product.brand, 
+          product.sku, 
+          product.description,
+          product.optionDesc1,
+      ].join(' ').toLowerCase();
 
-    const normalizedProductData = normalizeString(productDataString);
-
-    // 3. Guaranteed Match: Check if the product contains the clean query string
-    if (normalizedProductData.includes(normalizedQuery)) {
-        return true;
-    }
-
-    // 4. Fallback for multi-term searches: Check if the product contains ALL individual terms
-    const individualTerms = normalizedQuery.split(/\s+/).filter(t => t.length > 0);
-    if (individualTerms.length > 1) {
-        return individualTerms.every(term => normalizedProductData.includes(term));
-    }
-    
-    return false;
+      return searchTerms.every(term => productDataString.includes(term));
   });
-
 
   const displayTitle = currentQuery 
     ? `Search Results for "${currentQuery}"` 
