@@ -5,7 +5,7 @@ import BackButton from '../components/BackButton';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { CATEGORIES } from './HomePage';
 
-// Helper function for deep data cleaning and normalization (MUST match the SQL function)
+// Helper function for deep data cleaning and normalization (MUST match SQL function)
 const normalizeInput = (str) => {
     if (!str) return '';
     // Removes spaces, hyphens, slashes, commas, and converts to lowercase
@@ -48,7 +48,7 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
       setLoading(true);
       setError(null);
       
-      // 1. Fetch only by Category (Database side - reliable)
+      // 1. Fetch by Category (Database side - reliable)
       // Selecting all fields needed for the final normalized search logic
       let query = supabase
         .from('products')
@@ -71,27 +71,15 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
         setError("Failed to load products. Please check the database connection.");
         setProducts([]);
       } else {
-        // Store all fetched data locally
-        const mappedData = data.map(p => {
-            // Build the string to be normalized, safely replacing nulls with empty strings
-            const searchableString = [
-                p.name ?? '', 
-                p.brand ?? '', 
-                p.sku ?? '', 
-                p.description ?? '',
-                p.productOptionDescription1 ?? '',
-            ].join(' ');
-
-            return {
-                id: p.id,
-                name: p.name,
-                price: p.price,
-                image: p.productImageUrl,
-                brand: p.brand,
-                // Create the normalized data on the client for guaranteed searching
-                normalizedSearch: normalizeInput(searchableString),
-            };
-        });
+        // Store all fetched data locally, ensuring fields are available for local search
+        const mappedData = data.map(p => ({
+            id: p.id,
+            name: p.name,
+            price: p.price,
+            image: p.productImageUrl,
+            brand: p.brand,
+            normalizedSearch: p.normalized_search,
+        }));
         setProducts(mappedData);
       }
       setLoading(false);
@@ -108,18 +96,19 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
         return true; // If no search term, show everything fetched.
     }
     
-    // 1. Normalize the user's search query (e.g., "65W adapter")
-    const searchTerms = currentQuery.toLowerCase().split(/\s+/).filter(t => t.length > 0);
-    
-    // 2. Get the product's clean data string
-    const productData = product.normalizedSearch;
+    // Normalize the user's query
+    const normalizedQuery = normalizeInput(currentQuery);
+    const rawQuery = currentQuery.toLowerCase(); // For raw string matching
 
-    // 3. Check if the product contains AT LEAST ONE matching fragment
-    // If the user searches for "65W", we check if the product string contains "65w".
-    // If the user searches for "Dell", we check if the product string contains "dell".
+    // Check if the product's clean data string CONTAINS the entire normalized query string.
+    const normalizedMatch = product.normalizedSearch && product.normalizedSearch.includes(normalizedQuery);
     
-    // --- KEY FIX: Check if every search term is contained in the normalized data ---
-    return searchTerms.every(term => productData.includes(normalizeInput(term)));
+    // --- KEY FIX: Raw ILIKE check on the name field ---
+    // This catches keywords that might not fully normalize well (e.g., specific punctuation or phrasing)
+    const nameMatch = product.name && product.name.toLowerCase().includes(rawQuery);
+
+    // If EITHER the complex normalized search works OR the simple name search works, return true.
+    return normalizedMatch || nameMatch;
   });
 
 
