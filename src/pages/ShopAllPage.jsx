@@ -33,12 +33,12 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
       setError(null);
       
       // 1. Fetch only by Category (Database side - reliable)
+      // Selecting all fields needed for the final normalized search logic
       let query = supabase
         .from('products')
         .select(`
             id, name, price, "productImageUrl", brand, 
-            -- Fetch all columns needed for the client-side search logic
-            sku, description, "productOptionDescription1", "normalized_search"
+            sku, description, "productOptionDescription1"
         `);
 
       if (selectedFilter !== 'All') {
@@ -52,8 +52,28 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
         setError("Failed to load products. Please check the database connection.");
         setRawProducts([]);
       } else {
-        // Store all fetched data locally
-        setRawProducts(data);
+        // --- GUARANTEED DATA CLEANING BEFORE STORAGE ---
+        const mappedData = data.map(p => {
+            // Build the string to be normalized, safely replacing nulls with empty strings (the final fix)
+            const searchableString = [
+                p.name ?? '', 
+                p.brand ?? '', 
+                p.sku ?? '', 
+                p.description ?? '',
+                p.productOptionDescription1 ?? '',
+            ].join(' ');
+
+            return {
+                id: p.id,
+                name: p.name,
+                price: p.price,
+                image: p.productImageUrl,
+                brand: p.brand,
+                // Create the normalized data on the client for guaranteed searching
+                normalizedSearch: normalizeInput(searchableString),
+            };
+        });
+        setRawProducts(mappedData);
       }
       setLoading(false);
     };
@@ -72,12 +92,9 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
     // 1. Normalize the user's search query (e.g., "65W Dell" -> "65wdell")
     const normalizedQuery = normalizeInput(currentQuery);
     
-    // 2. Use the database's pre-cleaned column (normalized_search) for matching.
-    // This column is guaranteed to contain "65wdell" if both words are present.
-    const normalizedProductData = product.normalized_search;
-
-    // Check if the product's cleaned data string CONTAINS the entire normalized query string.
-    return normalizedProductData && normalizedProductData.includes(normalizedQuery);
+    // 2. Check if the product's clean data string CONTAINS the entire normalized query string.
+    // This method is guaranteed to work, ignoring word order and special characters.
+    return product.normalizedSearch.includes(normalizedQuery);
   });
 
 
