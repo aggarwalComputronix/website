@@ -5,7 +5,7 @@ import BackButton from '../components/BackButton';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { CATEGORIES } from './HomePage';
 
-// Helper function for deep data cleaning and normalization (MUST match SQL function)
+// Helper function for deep data cleaning and normalization (MUST match SQL function used in database)
 const normalizeInput = (str) => {
     if (!str) return '';
     // Removes spaces, hyphens, slashes, commas, and converts to lowercase
@@ -31,24 +31,24 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
       setLoading(true);
       setError(null);
       
-      // Select ALL necessary fields, including the normalized_search column
+      // Select only essential columns, minimizing data transfer from the server
       let query = supabase
         .from('products')
-        .select('id, name, price, "productImageUrl", brand, "normalized_search"');
+        .select('id, name, price, "productImageUrl", brand');
 
       // 1. Apply CATEGORY filter if one is selected (from the dropdown)
       if (selectedFilter !== 'All') {
         query = query.eq('collection', selectedFilter); 
       }
       
-      // 2. Apply FINAL GUARANTEED SEARCH using the normalized column
+      // 2. Apply FINAL SERVER-SIDE GUARANTEED SEARCH using the normalized column
       if (currentQuery) {
-        // --- KEY FIX: Normalize the user's input ---
-        // Example: "65W Dell" becomes "65wdell"
+        // Normalize the user's input before sending it to the database
         const cleanQuery = normalizeInput(currentQuery);
         
-        // This query finds all products where the normalized_search column CONTAINS the clean query string.
-        // This ignores word order (e.g., "65wdell" matches "dell65wadapter") and special characters.
+        // This query instructs the server (Supabase) to find products where the 
+        // normalized_search column CONTAINS the clean query string.
+        // This makes the search case- and order-agnostic.
         query = query.ilike('normalized_search', `%${cleanQuery}%`);
       }
       
