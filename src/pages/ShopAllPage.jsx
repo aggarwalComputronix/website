@@ -5,7 +5,10 @@ import BackButton from '../components/BackButton';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { CATEGORIES } from './HomePage';
 
-// We REMOVE the normalizeInput helper function entirely, relying solely on SQL ILIKE.
+// We revert to a simple clean function, focused on what the user types.
+const cleanInput = (str) => {
+    return String(str || '').toLowerCase().trim();
+};
 
 // Mapping table for common category variations (Same as ProductsPage)
 const CATEGORY_MAPPINGS = {
@@ -26,7 +29,7 @@ const CATEGORY_MAPPINGS = {
 
 const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
   // We fetch a raw product list and keep the search query local
-  const [products, setProducts] = useState([]); 
+  const [rawProducts, setRawProducts] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedFilter, setSelectedFilter] = useState('All'); 
@@ -43,57 +46,20 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
       setLoading(true);
       setError(null);
       
-      // Select ALL necessary fields, minimizing data transfer from the server
+      // 1. Fetch only by Category (Database side - reliable)
+      // FIX: Select ALL columns needed for the final client-side search logic.
       let query = supabase
         .from('products')
         .select(`
             id, name, price, "productImageUrl", brand, 
-            sku, description, "productOptionDescription1"
+            sku, description, "productOptionDescription1", 
+            "productOptionDescription2", "productOptionDescription3"
         `);
 
-      // 1. Apply CATEGORY filter using the OR/IN logic for data robustness
+      // 2. Apply CATEGORY filter using the OR/IN logic for data robustness
       if (selectedFilter !== 'All') {
         const categoryList = CATEGORY_MAPPINGS[selectedFilter] || [selectedFilter];
         query = query.in('collection', categoryList);
-      }
-      
-      // 2. Apply FINAL SERVER-SIDE ORDER/CASE-AGNOSTIC SEARCH
-      if (currentQuery) {
-        // Split the user's query into individual, space-separated search terms
-        const searchTerms = currentQuery.trim().toLowerCase().split(/\s+/).filter(t => t.length > 0);
-        
-        // --- KEY FIX: Construct a separate ILIKE filter for *EACH* term ---
-        if (searchTerms.length > 0) {
-            // Start with an empty filter array
-            let finalAndFilters = [];
-
-            searchTerms.forEach(term => {
-                // For each term (e.g., "65w"), we create a query string that checks if that term 
-                // is present in ANY of the critical columns.
-                const termFilter = 
-                    `name.ilike.%${term}%,` +
-                    `brand.ilike.%${term}%,` +
-                    `sku.ilike.%${term}%,` +
-                    `description.ilike.%${term}%`;
-                
-                // We add this OR filter to our array. 
-                // The final query uses .and() to ensure ALL terms are found.
-                finalAndFilters.push(termFilter);
-            });
-
-            // The .and() wrapper guarantees that results must match Term1 OR Term2 OR...
-            // Note: The structure needs to be `and(or(term1 checks), or(term2 checks))`
-            
-            // To simplify and ensure the query runs: we'll run a base filter on the OR-ed string.
-            // THIS IS THE FINAL BRUTE-FORCE ILIKE IMPLEMENTATION.
-            const queryParts = searchTerms.map(term => {
-                return `name.ilike.%${term}% | brand.ilike.%${term}% | sku.ilike.%${term}% | description.ilike.%${term}%`;
-            }).join(' & '); // Join with AND (&) operator
-
-            if (queryParts) {
-                 query = query.filter(queryParts);
-            }
-        }
       }
       
       const { data, error } = await query;
@@ -101,7 +67,7 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
       if (error) {
         console.error("Error fetching all products:", error);
         setError("Failed to load products. Please check the database connection.");
-        setProducts([]);
+        setRawProducts([]);
       } else {
         // Store all fetched data locally
         const mappedData = data.map(p => ({
@@ -110,39 +76,49 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
             price: p.price,
             image: p.productImageUrl,
             brand: p.brand,
-            sku: p.sku, 
+            sku: p.sku,
             description: p.description,
+            // Include other descriptive fields for comprehensive local search
             optionDesc1: p.productOptionDescription1,
+            optionDesc2: p.productOptionDescription2,
+            optionDesc3: p.productOptionDescription3,
         }));
-        setProducts(mappedData);
+        setRawProducts(mappedData);
       }
       setLoading(false);
     };
 
     // Re-fetch from DB only when the category filter changes
     fetchAllProducts();
-  }, [selectedFilter, currentQuery]); 
+  }, [selectedFilter]); 
 
 
-  // *** CLIENT-SIDE POST-FILTERING (Final Guarantee) ***
-  // Perform a final, strict client-side check to guarantee all terms are present
-  const finalFilteredProducts = products.filter(product => {
-    if (!currentQuery) return true;
-
-    // Split the user's query into individual words for matching
+  // *** FINAL: CLIENT-SIDE SEARCH FILTERING (Order- and Case-Agnostic) ***
+  // We run this filtering whenever the search query changes, guaranteeing the results.
+  const finalFilteredProducts = rawProducts.filter(product => {
+    if (!currentQuery) {
+        return true; // If no search term, show everything fetched.
+    }
+    
+    // 1. Split the user's query into individual words
     const searchTerms = currentQuery.toLowerCase().split(/\s+/).filter(t => t.length > 0);
     
-    // Create one searchable string from the product data
+    // 2. Create one raw, searchable string from the product data
     const productDataString = [
         product.name, 
         product.brand, 
         product.sku, 
         product.description,
+        product.optionDesc1,
+        product.optionDesc2,
+        product.optionDesc3,
     ].join(' ').toLowerCase();
-    
-    // This returns TRUE only if EVERY single search term is found in the combined product string.
+
+    // 3. Check if the product data contains EVERY single search term (order-agnostic AND logic)
+    // This returns TRUE only if ALL search terms are found in the combined product string.
     return searchTerms.every(term => productDataString.includes(term));
   });
+
 
   const displayTitle = currentQuery 
     ? `Search Results for "${currentQuery}"` 
