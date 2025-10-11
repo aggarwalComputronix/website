@@ -30,6 +30,7 @@ const CATEGORY_MAPPINGS = {
 
 
 const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
+  // We fetch a raw product list and keep the search query local
   const [products, setProducts] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -48,7 +49,7 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
       setError(null);
       
       // 1. Fetch only by Category (Database side - reliable)
-      // FIX: Select the normalized_search column to make the local search work
+      // Selecting all fields needed for the final normalized search logic
       let query = supabase
         .from('products')
         .select(`
@@ -71,15 +72,26 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
         setProducts([]);
       } else {
         // Store all fetched data locally
-        const mappedData = data.map(p => ({
-            id: p.id,
-            name: p.name,
-            price: p.price,
-            image: p.productImageUrl,
-            brand: p.brand,
-            // Pass through the normalized data for local search
-            normalizedSearch: p.normalized_search,
-        }));
+        const mappedData = data.map(p => {
+            // Build the string to be normalized, safely replacing nulls with empty strings
+            const searchableString = [
+                p.name ?? '', 
+                p.brand ?? '', 
+                p.sku ?? '', 
+                p.description ?? '',
+                p.productOptionDescription1 ?? '',
+            ].join(' ');
+
+            return {
+                id: p.id,
+                name: p.name,
+                price: p.price,
+                image: p.productImageUrl,
+                brand: p.brand,
+                // Create the normalized data on the client for guaranteed searching
+                normalizedSearch: normalizeInput(searchableString),
+            };
+        });
         setProducts(mappedData);
       }
       setLoading(false);
@@ -90,19 +102,24 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
   }, [selectedFilter]); 
 
 
-  // *** FINAL: CLIENT-SIDE SEARCH FILTERING (Order- and Case-Agnostic) ***
-  // We run this filtering whenever the search query changes, regardless of the DB fetch.
+  // *** FINAL: CLIENT-SIDE SEARCH FILTERING (Fragmented Word Match) ***
   const finalFilteredProducts = products.filter(product => {
     if (!currentQuery) {
         return true; // If no search term, show everything fetched.
     }
     
-    // 1. Normalize the user's search query (e.g., "65W Dell" -> "65wdell")
-    const normalizedQuery = normalizeInput(currentQuery);
+    // 1. Normalize the user's search query (e.g., "65W adapter")
+    const searchTerms = currentQuery.toLowerCase().split(/\s+/).filter(t => t.length > 0);
     
-    // 2. Check if the product's clean data string CONTAINS the entire normalized query string.
-    // This is the guaranteed match, ignoring word order and special characters.
-    return product.normalizedSearch && product.normalizedSearch.includes(normalizedQuery);
+    // 2. Get the product's clean data string
+    const productData = product.normalizedSearch;
+
+    // 3. Check if the product contains AT LEAST ONE matching fragment
+    // If the user searches for "65W", we check if the product string contains "65w".
+    // If the user searches for "Dell", we check if the product string contains "dell".
+    
+    // --- KEY FIX: Check if every search term is contained in the normalized data ---
+    return searchTerms.every(term => productData.includes(normalizeInput(term)));
   });
 
 
