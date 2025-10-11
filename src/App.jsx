@@ -7,22 +7,25 @@ import ProductsPage from './pages/ProductsPage';
 import ShopAllPage from './pages/ShopAllPage';
 import AdminDashboard from './pages/AdminDashboard';
 import AuthPage from './pages/AuthPage';
-import LoadingSpinner from './components/LoadingSpinner'; // Import the new component
+import ProductDetailPage from './pages/ProductDetailPage'; 
+import LoadingSpinner from './components/LoadingSpinner';
 import './index.css';
 
 const App = () => {
   const [currentPage, setCurrentPage] = useState('home');
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [searchTerm, setSearchTerm] = useState(null);
+  const [selectedProductId, setSelectedProductId] = useState(null); // State for single product ID
   const [session, setSession] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Custom navigation function: navigateToPage(page, categoryName, searchTerm)
-  const navigateToPage = (page, categoryName = null, query = null) => {
-    // 1. Reset category and search term on any navigation unless explicitly set
+  // Custom navigation function: navigateToPage(page, categoryName, query, productId)
+  const navigateToPage = (page, categoryName = null, query = null, productId = null) => {
+    // 1. Reset filters/selection on navigation
     setSelectedCategory(categoryName); 
     setSearchTerm(query); 
+    setSelectedProductId(productId); // Set product ID for detail page
     
     // 2. Set the current page
     setCurrentPage(page);
@@ -69,7 +72,6 @@ const App = () => {
           checkAdminStatus(session.user.id);
         } else {
           setIsAdmin(false);
-          // When logging out, we return to home.
           navigateToPage('home'); 
         }
       }
@@ -93,14 +95,11 @@ const App = () => {
   };
 
   if (loading) {
-    // Show LoadingSpinner during the initial auth check
     return <LoadingSpinner text="Connecting to Secure Services..." />; 
   }
 
   const renderPage = () => {
     
-    // --- AUTHENTICATION AND PAGE ACCESS LOGIC ---
-
     // Scenario 1: User is NOT logged in AND is trying to access the Admin/Auth pages
     if (!session && (currentPage === 'admin' || currentPage === 'login' || currentPage === 'createprofile')) {
       return <AuthPage setCurrentPage={navigateToPage} />;
@@ -111,7 +110,13 @@ const App = () => {
       return <AdminDashboard setCurrentPage={navigateToPage} />;
     }
     
-    // Scenario 3: All public pages (Home, Products, ShopAll)
+    // Scenario 3: Product Detail Page
+    if (currentPage === 'detail') {
+        // Render the new detail page, passing the selected product ID
+        return <ProductDetailPage productId={selectedProductId} setCurrentPage={navigateToPage} />;
+    }
+
+    // Scenario 4: All public pages (Home, Products, ShopAll)
     switch (currentPage) {
       case 'home':
         return <HomePage setCurrentPage={navigateToPage} />; 
@@ -122,7 +127,6 @@ const App = () => {
       case 'admin':
       case 'login':
       case 'createprofile':
-        // If logged in but not admin, or just coming off a failed auth attempt, redirect to home.
         return <HomePage setCurrentPage={navigateToPage} />;
       default:
         return <HomePage setCurrentPage={navigateToPage} />;
