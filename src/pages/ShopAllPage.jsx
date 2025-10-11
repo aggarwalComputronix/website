@@ -5,16 +5,31 @@ import BackButton from '../components/BackButton';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { CATEGORIES } from './HomePage';
 
-// Helper function for deep data cleaning and normalization (MUST match SQL function)
-const normalizeInput = (str) => {
-    if (!str) return '';
-    // Removes spaces, hyphens, slashes, commas, and converts to lowercase
-    return String(str).toLowerCase().replace(/[\s\-\/\,]/g, '');
+// We revert to a simple clean function, focused on what the user types.
+const cleanInput = (str) => {
+    return String(str || '').toLowerCase().trim();
 };
 
-// This component now receives the search term and navigation function from App.jsx
+// Mapping table for common category variations (Same as ProductsPage)
+const CATEGORY_MAPPINGS = {
+  'Batteries': ['Batteries', 'Laptop Battery', 'Battery'],
+  'Adapters': ['Adapters', 'Laptop Adapter', 'Adapter'],
+  'Docking Station': ['Docking Station', 'DockingStation'],
+  'Locks': ['Locks', 'Cable Lock'],
+  'Headphones': ['Headphones', 'Headset'],
+  'Mouse': ['Mouse', 'Computer Mouse'],
+  'Screens': ['Screens', 'All In One Screens', 'Laptop Screen'],
+  'Privacy Filters': ['Privacy Filters', 'Privacy Filter'],
+  'Stands': ['Stands', 'Laptop Stand'],
+  'Bags': ['Bags', 'Laptop Bag'],
+  'Webcams': ['Webcams', 'Webcam'],
+  'Cables': ['Cables', 'Cable'],
+};
+
+
 const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
-  const [products, setProducts] = useState([]); 
+  // We fetch a raw product list and keep the search query local
+  const [rawProducts, setRawProducts] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedFilter, setSelectedFilter] = useState('All'); 
@@ -31,25 +46,20 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
       setLoading(true);
       setError(null);
       
-      // Select ALL necessary fields, including the normalized_search column
+      // 1. Fetch only by Category (Database side - reliable)
+      // FIX: Select ALL columns needed for the final client-side search logic.
       let query = supabase
         .from('products')
-        .select('id, name, price, "productImageUrl", brand, "normalized_search"');
+        .select(`
+            id, name, price, "productImageUrl", brand, 
+            sku, description, "productOptionDescription1", 
+            "productOptionDescription2", "productOptionDescription3"
+        `);
 
-      // 1. Apply CATEGORY filter if one is selected (from the dropdown)
+      // 2. Apply CATEGORY filter using the OR/IN logic for data robustness
       if (selectedFilter !== 'All') {
-        query = query.eq('collection', selectedFilter); 
-      }
-      
-      // 2. Apply FINAL GUARANTEED SEARCH using the normalized column
-      if (currentQuery) {
-        // --- KEY FIX: Normalize the user's input ---
-        // Example: "65W Dell" becomes "65wdell"
-        const cleanQuery = normalizeInput(currentQuery);
-        
-        // This query finds all products where the normalized_search column CONTAINS the clean query string.
-        // This ignores word order (e.g., "65wdell" matches "dell65wadapter") and special characters.
-        query = query.ilike('normalized_search', `%${cleanQuery}%`);
+        const categoryList = CATEGORY_MAPPINGS[selectedFilter] || [selectedFilter];
+        query = query.in('collection', categoryList);
       }
       
       const { data, error } = await query;
@@ -57,23 +67,58 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
       if (error) {
         console.error("Error fetching all products:", error);
         setError("Failed to load products. Please check the database connection.");
-        setProducts([]);
+        setRawProducts([]);
       } else {
-        // Map data to match ProductCard structure
+        // Store all fetched data locally
         const mappedData = data.map(p => ({
             id: p.id,
             name: p.name,
             price: p.price,
             image: p.productImageUrl,
             brand: p.brand,
+            sku: p.sku,
+            description: p.description,
+            // Include other descriptive fields for comprehensive local search
+            optionDesc1: p.productOptionDescription1,
+            optionDesc2: p.productOptionDescription2,
+            optionDesc3: p.productOptionDescription3,
         }));
-        setProducts(mappedData);
+        setRawProducts(mappedData);
       }
       setLoading(false);
     };
 
+    // Re-fetch from DB only when the category filter changes
     fetchAllProducts();
-  }, [selectedFilter, currentQuery]); // Re-run the fetch whenever either filter changes
+  }, [selectedFilter]); 
+
+
+  // *** FINAL: CLIENT-SIDE SEARCH FILTERING (Order- and Case-Agnostic) ***
+  // We run this filtering whenever the search query changes, guaranteeing the results.
+  const finalFilteredProducts = rawProducts.filter(product => {
+    if (!currentQuery) {
+        return true; // If no search term, show everything fetched.
+    }
+    
+    // 1. Split the user's query into individual words
+    const searchTerms = currentQuery.toLowerCase().split(/\s+/).filter(t => t.length > 0);
+    
+    // 2. Create one raw, searchable string from the product data
+    const productDataString = [
+        product.name, 
+        product.brand, 
+        product.sku, 
+        product.description,
+        product.optionDesc1,
+        product.optionDesc2,
+        product.optionDesc3,
+    ].join(' ').toLowerCase();
+
+    // 3. Check if the product data contains EVERY single search term (order-agnostic AND logic)
+    // This returns TRUE only if ALL search terms are found in the combined product string.
+    return searchTerms.every(term => productDataString.includes(term));
+  });
+
 
   const displayTitle = currentQuery 
     ? `Search Results for "${currentQuery}"` 
@@ -132,15 +177,15 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
         </div>
       )}
 
-      {!loading && products.length === 0 && !error && (
+      {!loading && finalFilteredProducts.length === 0 && !error && (
         <div className="text-center py-10 text-gray-500">
           <p>No products available matching the current search and category filters.</p>
         </div>
       )}
 
-      {!loading && products.length > 0 && (
+      {!loading && finalFilteredProducts.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-            {products.map(p => (
+            {finalFilteredProducts.map(p => (
               <ProductCard key={p.id} name={p.name} price={p.price} image={p.productImageUrl} brand={p.brand} />
             ))}
         </div>
