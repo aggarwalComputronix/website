@@ -4,7 +4,8 @@ import React from 'react';
 const ProductCard = ({ id, name, price, image, brand, onClick }) => {
   const handleClick = () => {
     if (onClick) {
-      onClick(id); // Pass the unique product ID on click
+      // Navigate to the 'detail' page and pass the product ID
+      onClick(id); 
     }
   };
   
