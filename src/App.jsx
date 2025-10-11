@@ -7,7 +7,7 @@ import ProductsPage from './pages/ProductsPage';
 import ShopAllPage from './pages/ShopAllPage';
 import AdminDashboard from './pages/AdminDashboard';
 import AuthPage from './pages/AuthPage';
-import ProductDetailPage from './pages/ProductDetailPage'; // Import the new detail page
+import ProductDetailPage from './pages/ProductDetailPage'; 
 import LoadingSpinner from './components/LoadingSpinner';
 import './index.css';
 

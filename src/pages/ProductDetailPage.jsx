@@ -25,7 +25,7 @@ const ProductDetailPage = ({ productId, setCurrentPage }) => {
 
       if (error) {
         console.error("Error fetching product details:", error);
-        setError("Failed to load product details. It may not exist.");
+        setError("Failed to load product details. It may not exist or the ID is invalid.");
         setProduct(null);
       } else {
         setProduct(data);
@@ -95,22 +95,15 @@ const ProductDetailPage = ({ productId, setCurrentPage }) => {
             <p className="text-gray-600 whitespace-pre-wrap leading-relaxed">
               {product.description || 'No detailed description available.'}
             </p>
-            
-            {product.ribbon && (
-                <div className="text-sm font-semibold text-white bg-red-500 inline-block px-3 py-1 rounded-full">
-                    {product.ribbon}
-                </div>
-            )}
 
-            {/* General Specs */}
             <h2 className="text-2xl font-bold text-gray-800 border-b pb-2 pt-4">Key Specifications</h2>
             <ul className="text-gray-600 space-y-2 text-sm bg-gray-50 p-4 rounded-lg">
-                <SpecRow label="Brand" value={product.brand} />
-                <SpecRow label="Collection" value={product.collection} />
-                <SpecRow label="Product Type" value={product.fieldType} />
-                <SpecRow label="Inventory Status" value={product.inventory === 99999 ? 'High/In Stock' : product.inventory || 'N/A'} />
-                <SpecRow label="Weight" value={product.weight} unit="kg" />
-                <SpecRow label="Visible on Site" value={product.visible ? 'Yes' : 'No'} />
+              <SpecRow label="Brand" value={product.brand} />
+              <SpecRow label="Collection" value={product.collection} />
+              <SpecRow label="Product Type" value={product.fieldType} />
+              <SpecRow label="Inventory Status" value={product.inventory === 99999 ? 'High/In Stock' : product.inventory || 'N/A'} />
+              <SpecRow label="Weight" value={product.weight} unit="kg" />
+              <SpecRow label="Visible on Site" value={product.visible ? 'Yes' : 'No'} />
             </ul>
           </div>
         </div>
