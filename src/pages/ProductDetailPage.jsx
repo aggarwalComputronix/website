@@ -66,6 +66,11 @@ const ProductDetailPage = ({ productId, setCurrentPage }) => {
     { title: 'Option Name 2', value: product.productOptionName2 },
     { title: 'Option Description 2', value: product.productOptionDescription2 },
     { title: 'Additional Info 1', value: product.additionalInfoDescription1 },
+    { title: 'Additional Info 2', value: product.additionalInfoDescription2 },
+    { title: 'Additional Info 3', value: product.additionalInfoDescription3 },
+    { title: 'Additional Info 4', value: product.additionalInfoDescription4 },
+    { title: 'Additional Info 5', value: product.additionalInfoDescription5 },
+    { title: 'Additional Info 6', value: product.additionalInfoDescription6 },
   ].filter(item => item.value); // Only show rows with actual data
 
   // --- Display logic for the full product detail ---
