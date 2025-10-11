@@ -12,10 +12,25 @@ const normalizeInput = (str) => {
     return String(str).toLowerCase().replace(/[\s\-\/\,]/g, '');
 };
 
-// This component now receives the search term and navigation function from App.jsx
+// Mapping table for common category variations (Same as ProductsPage)
+const CATEGORY_MAPPINGS = {
+  'Batteries': ['Batteries', 'Laptop Battery', 'Battery'],
+  'Adapters': ['Adapters', 'Laptop Adapter', 'Adapter'],
+  'Docking Station': ['Docking Station', 'DockingStation'],
+  'Locks': ['Locks', 'Cable Lock'],
+  'Headphones': ['Headphones', 'Headset'],
+  'Mouse': ['Mouse', 'Computer Mouse'],
+  'Screens': ['Screens', 'All In One Screens', 'Laptop Screen'],
+  'Privacy Filters': ['Privacy Filters', 'Privacy Filter'],
+  'Stands': ['Stands', 'Laptop Stand'],
+  'Bags': ['Bags', 'Laptop Bag'],
+  'Webcams': ['Webcams', 'Webcam'],
+  'Cables': ['Cables', 'Cable'],
+};
+
+
 const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
-  // We fetch a raw product list and keep the search query local
-  const [rawProducts, setRawProducts] = useState([]); 
+  const [products, setProducts] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedFilter, setSelectedFilter] = useState('All'); 
@@ -33,16 +48,19 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
       setError(null);
       
       // 1. Fetch only by Category (Database side - reliable)
-      // Selecting all fields needed for the final normalized search logic
+      // FIX: Select the normalized_search column to make the local search work
       let query = supabase
         .from('products')
         .select(`
             id, name, price, "productImageUrl", brand, 
-            sku, description, "productOptionDescription1"
+            sku, description, "productOptionDescription1", 
+            normalized_search 
         `);
 
+      // 2. Apply CATEGORY filter using the OR/IN logic for data robustness
       if (selectedFilter !== 'All') {
-        query = query.eq('collection', selectedFilter); 
+        const categoryList = CATEGORY_MAPPINGS[selectedFilter] || [selectedFilter];
+        query = query.in('collection', categoryList);
       }
       
       const { data, error } = await query;
@@ -50,30 +68,19 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
       if (error) {
         console.error("Error fetching all products:", error);
         setError("Failed to load products. Please check the database connection.");
-        setRawProducts([]);
+        setProducts([]);
       } else {
-        // --- GUARANTEED DATA CLEANING BEFORE STORAGE ---
-        const mappedData = data.map(p => {
-            // Build the string to be normalized, safely replacing nulls with empty strings (the final fix)
-            const searchableString = [
-                p.name ?? '', 
-                p.brand ?? '', 
-                p.sku ?? '', 
-                p.description ?? '',
-                p.productOptionDescription1 ?? '',
-            ].join(' ');
-
-            return {
-                id: p.id,
-                name: p.name,
-                price: p.price,
-                image: p.productImageUrl,
-                brand: p.brand,
-                // Create the normalized data on the client for guaranteed searching
-                normalizedSearch: normalizeInput(searchableString),
-            };
-        });
-        setRawProducts(mappedData);
+        // Store all fetched data locally
+        const mappedData = data.map(p => ({
+            id: p.id,
+            name: p.name,
+            price: p.price,
+            image: p.productImageUrl,
+            brand: p.brand,
+            // Pass through the normalized data for local search
+            normalizedSearch: p.normalized_search,
+        }));
+        setProducts(mappedData);
       }
       setLoading(false);
     };
@@ -84,7 +91,8 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
 
 
   // *** FINAL: CLIENT-SIDE SEARCH FILTERING (Order- and Case-Agnostic) ***
-  const finalFilteredProducts = rawProducts.filter(product => {
+  // We run this filtering whenever the search query changes, regardless of the DB fetch.
+  const finalFilteredProducts = products.filter(product => {
     if (!currentQuery) {
         return true; // If no search term, show everything fetched.
     }
@@ -93,8 +101,8 @@ const ShopAllPage = ({ searchTerm, setCurrentPage }) => {
     const normalizedQuery = normalizeInput(currentQuery);
     
     // 2. Check if the product's clean data string CONTAINS the entire normalized query string.
-    // This method is guaranteed to work, ignoring word order and special characters.
-    return product.normalizedSearch.includes(normalizedQuery);
+    // This is the guaranteed match, ignoring word order and special characters.
+    return product.normalizedSearch && product.normalizedSearch.includes(normalizedQuery);
   });
 
 
