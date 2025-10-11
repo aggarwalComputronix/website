@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import ProductCard from '../components/ProductCard';
-import BackButton from '../components/BackButton';
+import BackButton from '../components/BackButton'; 
 import LoadingSpinner from '../components/LoadingSpinner';
 
-// Mapping table for common category variations in the database
+// Mapping table for common category variations (for robust filtering)
 const CATEGORY_MAPPINGS = {
   'Batteries': ['Batteries', 'Laptop Battery', 'Battery'],
   'Adapters': ['Adapters', 'Laptop Adapter', 'Adapter'],
@@ -20,11 +20,11 @@ const CATEGORY_MAPPINGS = {
   'Cables': ['Cables', 'Cable'],
 };
 
-const ProductsPage = ({ selectedCategory, setCurrentPage }) => {
+const ProductsPage = ({ selectedCategory, setCurrentPage: navigate }) => { // Renaming setCurrentPage to navigate
   const [products, setProducts] = useState([]);
   const [uniqueBrands, setUniqueBrands] = useState([]);
   const [selectedBrand, setSelectedBrand] = useState('All');
-  const [localSearchTerm, setLocalSearchTerm] = useState(''); // NEW: Local search term state
+  const [localSearchTerm, setLocalSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -37,13 +37,14 @@ const ProductsPage = ({ selectedCategory, setCurrentPage }) => {
         .from('products')
         .select('id, name, price, "productImageUrl", brand, collection, sku');
 
-      // 1. Filter by the initial Category (required)
+      // --- 1. Filter by Category (Handling Mismatches) ---
       if (selectedCategory) {
+        // Use the robust category list for filtering
         const categoryList = CATEGORY_MAPPINGS[selectedCategory] || [selectedCategory]; 
         query = query.in('collection', categoryList);
       }
       
-      // 2. Filter by the selected Brand (optional - DB side)
+      // --- 2. Filter by the selected Brand (optional) ---
       if (selectedBrand !== 'All') {
         query = query.eq('brand', selectedBrand);
       }
@@ -63,11 +64,10 @@ const ProductsPage = ({ selectedCategory, setCurrentPage }) => {
             image: p.productImageUrl,
             brand: p.brand,
             collection: p.collection, 
-            sku: p.sku, // Keep SKU for local filtering
+            sku: p.sku, 
         }));
         setProducts(mappedProducts);
 
-        // Extract unique brands from the fetched data
         const brands = [...new Set(mappedProducts.map(p => p.brand).filter(b => b))];
         setUniqueBrands(brands);
       }
@@ -75,16 +75,15 @@ const ProductsPage = ({ selectedCategory, setCurrentPage }) => {
     };
 
     fetchProducts();
-  }, [selectedCategory, selectedBrand]); // Re-run fetch when category or brand changes
+  }, [selectedCategory, selectedBrand]); 
 
   // --- CLIENT-SIDE SEARCH LOGIC ---
   const filteredAndSearchedProducts = products.filter(product => {
     if (!localSearchTerm) {
-      return true; // Show all if no local search term is present
+      return true; 
     }
     const searchLower = localSearchTerm.toLowerCase();
     
-    // Search the name, SKU, and brand of the currently displayed products
     return product.name.toLowerCase().includes(searchLower) ||
            product.sku?.toLowerCase().includes(searchLower) ||
            product.brand?.toLowerCase().includes(searchLower);
@@ -94,7 +93,7 @@ const ProductsPage = ({ selectedCategory, setCurrentPage }) => {
 
   return (
     <section className="relative container mx-auto px-4 py-12 min-h-[60vh]">
-      <BackButton setCurrentPage={setCurrentPage} />
+      <BackButton setCurrentPage={navigate} />
       
       <h1 className="text-4xl font-extrabold text-gray-900 mb-8 text-center border-b pb-4 pt-12 md:pt-0">
         {displayTitle}
@@ -147,7 +146,7 @@ const ProductsPage = ({ selectedCategory, setCurrentPage }) => {
         </div>
       )}
 
-      {!loading && filteredAndSearchedProducts.length === 0 && (
+      {!loading && filteredAndSearchedProducts.length === 0 && !error && (
         <div className="text-center py-10 text-gray-500">
           <p>No products found matching the current search and filter settings.</p>
         </div>
@@ -156,7 +155,16 @@ const ProductsPage = ({ selectedCategory, setCurrentPage }) => {
       {!loading && filteredAndSearchedProducts.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
           {filteredAndSearchedProducts.map(p => (
-            <ProductCard key={p.id} name={p.name} price={p.price} image={p.image} brand={p.brand} />
+            <ProductCard 
+              key={p.id} 
+              id={p.id} 
+              name={p.name} 
+              price={p.price} 
+              image={p.image} 
+              brand={p.brand} 
+              // FIXED: Ensure correct navigation to the 'detail' page with the product ID
+              onClick={(productId) => navigate('detail', null, null, productId)}
+            />
           ))}
         </div>
       )}
